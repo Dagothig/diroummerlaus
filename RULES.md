@@ -31,7 +31,7 @@ Each player starts the game with 50 Hit Points. A player is eliminated when his 
 
 ## Card categories
 
-The cards are divided into different categories that are recognizable by their background color. You can obtain a card's description in two ways: by placing your cursor over the card or clicking on it. The latter will also make the description appear in the newswire (text zone that describes the game action).
+The cards are divided into different categories that are recognizable by their background color.
 
 ### Attack Damage (AD) - orange
 These cards reduce the Hit Points of an opponent and may even cause his instant removal in some cases.

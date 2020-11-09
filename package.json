@@ -1,0 +1,17 @@
+{
+  "name": "diroummerlaus",
+  "version": "1.0.0",
+  "description": "#diroum plays Emmerlaüs",
+  "main": "index.js",
+  "author": "dagothig <guillaumenoelmartel@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "test": "ava",
+    "coverage": "nyc ava",
+    "watch-test": "watchexec -e js -r yarn ava"
+  },
+  "devDependencies": {
+    "ava": "^3.13.0",
+    "nyc": "^15.1.0"
+  }
+}
