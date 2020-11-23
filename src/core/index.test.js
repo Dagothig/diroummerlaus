@@ -1,5 +1,5 @@
 const test = require('ava');
-const { Game, cards, definitions: { EventTypes: { DRAW, QUESTION } } } = require('.');
+const { Game, cards, definitions: { EventTypes: { DRAW, QUESTION, PLAY, DAMAGE } } } = require('.');
 const { CardTypes } = require('./definitions');
 
 class AsyncQueue {
@@ -90,9 +90,9 @@ test('PluiesDeBoulesDeFeu', async t => {
     });
 
     const choice = event.question.choices.find(choice => choice.card === cards.PluieDeBoulesDeFeu);
-    await game.send(event.question.wizard, choice);
+    await game.send(event.question.wizard.name, choice);
 
-    const playEvent = await msgs.dequeue();
+    const [playEvent] = await msgs.dequeue();
     t.like(playEvent, {
         type: PLAY,
         wizard: game.wizards[0],
@@ -101,7 +101,15 @@ test('PluiesDeBoulesDeFeu', async t => {
     });
 
     const damageEvents = await msgs.dequeue(2);
-    players.except(event.wizard.name).forEach(player => {
-        const damageEvent = damageEvent.find(e => e.target.name === player);
+    players.except(event.question.wizard.name).forEach(player => {
+        const damageEvent = damageEvents.find(e => e.target.name === player);
+        t.like(damageEvent, {
+            type: DAMAGE,
+            wizard: event.question.wizard,
+            target: {
+                name: player,
+                currentHitPoints: config.hitPoints - damageEvent.amount
+            }
+        })
     });
 });

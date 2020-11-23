@@ -1,4 +1,12 @@
-const { CardTypes, EventTypes: { DRAW, QUESTION, PLAY } } = require('./definitions');
+const {
+    CardTypes,
+    EventTypes: {
+        DRAW,
+        QUESTION,
+        PLAY,
+        DAMAGE
+    }
+} = require('./definitions');
 
 class Player {
     constructor({ name, hitPoints }) {
@@ -152,6 +160,10 @@ class Game {
             }))
         });
 
+        if (!card) {
+            return;
+        }
+
         const targets = (await Promise.all(
             this.targets({ card, target })({ game: this, wizard }).map(target =>
                 this.onTarget({ ...card, wizard, target })))
@@ -182,8 +194,8 @@ class Game {
     async damage({ wizard, target, targets, amount }) {
         targets = [...targets, target].filter(Function.id);
         targets.forEach(target => {
-            target.hitPoints -= amount;
-            this.event({ type: this.damage, wizard, target, amount });
+            target.currentHitPoints -= amount;
+            this.event({ type: DAMAGE, wizard, target, amount });
         });
         await Promise.all(targets
             .filter(target => !target.isAlive)
