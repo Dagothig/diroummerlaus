@@ -119,3 +119,15 @@ test('Function#id', t => {
 test('Function#noop', t => {
     t.is(Function.noop('woo'))
 });
+
+test('Object#allKeys', t => {
+    const sym = Symbol("sym");
+    const obj = { [sym]: 'foo', key: 'bar' };
+    t.deepEqual(Object.allKeys(obj), ['key', sym]);
+});
+
+test('Object#allValues', t => {
+    const sym = Symbol("sym");
+    const obj = { [sym]: 'foo', key: 'bar' };
+    t.deepEqual(Object.allValues(obj), ['bar', 'foo']);
+});

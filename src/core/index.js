@@ -1,7 +1,7 @@
 require('../monkey');
 
-module.exports = {
-    Game: require('./Game'),
-    cards: require('./cards'),
-    definitions: require('./definitions')
-};
+module.exports = Object.fromEntries([
+    'Game',
+    'cards',
+    'definitions'
+].map(path => [path, require('./' + path)]));

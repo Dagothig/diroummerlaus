@@ -1,315 +1,215 @@
-const { CardTypes } = require('./definitions');
+const {
+    CardTypes: { AM, AD, A, E, S, ST, O, CO },
+    Calc: { MUL, ADD, PL, ROLL, HP, CHOOSE, SACRIFICE, CASTER, TARGET },
+    Targets: { SELF, OTHER, OTHERS, LEFT, RIGHT },
+} = require('./definitions');
 
-module.exports.PluieDeBoulesDeFeu = {
-    type: CardTypes.AM,
+const PluieDeBoulesDeFeu = {
+    type: AM,
+    canSave: 0.5,
+    canResist: true,
+    canCancel: false,
+    canRedirect: true,
+    damage: [MUL, [ROLL, 1, 8], PL]
+};
+
+const SouffranceEmpirique = {
+    type: AM,
     canSave: true,
     canResist: true,
     canCancel: false,
     canRedirect: true,
-    async onPlay({ game, wizard, targets, card }) {
-        await game.damage({
-            ...card,
-            wizard,
-            targets,
-            amount: await game.roll(1, 8) * wizard.powerLevel
-        });
-    }
+    damage: [MUL, 0.5, [TARGET, HP]]
 };
 
-/*
+const VapeurExplosive = {
+    type: AM,
+    canSave: 0.5,
+    canResist: true,
+    canCancel: true,
+    canRedirect: true,
+    damage: [MUL, [ROLL, 1, 12], [PL]]
+};
+
 const PotionDEnergie = {
-    type: CardTypes.A,
+    type: A,
     canSave: false,
     canResist: false,
     canCancel: false,
     canRedirect: false,
-    play: [
-        [Roll, 4, 6],
-        [Heal]
-    ]
+    heal: [ROLL, 4, 6]
 };
 
-const PotionDEnergiMajeure = {
-    ...EnergyPotion,
-    play: [
-        [Roll, 5, 10],
-        [Heal]
-    ]
-};
+const PotionDEnergiMajeure = { ...PotionDEnergie, heal: [ROLL, 5, 10] };
+const PotionDEnergieSuperieure = { ...PotionDEnergie, heal: [ROLL, 6, 12] };
+const PotionDEnergieSupreme = { ...PotionDEnergie, heal: [ROLL, 1, 100] };
 
-const PotionDEnergieSuperieure = {
-    ...EnergyPotion,
-    play: [
-        [Roll, 6, 12],
-        [Heal]
-    ]
-};
-
-const PotionDEnergieSupreme = {
-    ...EnergyPotion,
-    play: [
-        [Roll, 1, 100],
-        [Heal]
-    ]
+const Pulverisateur = {
+    type: AD,
+    canSave: true,
+    canResist: true,
+    canCancel: true,
+    canRedirect: true,
+    damage: [MUL, [ROLL, 1, 10], PL]
 };
 
 const ProjectileMagique = {
-    type: CardTypes.AD,
+    ...Pulverisateur,
     canSave: false,
     canResist: false,
-    canCancel: true,
-    canRedirect: true,
-    play: [
-        [Roll, 1, 4],
-        [Source],
-        [PlayerPowerLevel],
-        [Mul],
-        [Damage]
-    ]
+    damage: [MUL, [ROLL, 1, 4], PL]
+};
+
+const RayonAcide = { ...Pulverisateur, acid: true };
+const RayonLaser = { ...Pulverisateur };
+const SouffleEnflamme = { ...Pulverisateur, damage: [MUL, [ROLL, 1, 10], [ADD, PL, 1]] };
+const SpiraleDeFeu = { ...SouffleEnflamme };
+
+const Violence = { ...Pulverisateur, damage: [MUL, [ROLL, 1, 12], PL] };
+
+const SuperBouleDeFeu = { ...Pulverisateur, damage: [MUL, [ROLL, 1, 20], [ADD, PL, 1]] };
+
+const Torpide = {
+    ...Pulverisateur,
+    canSave: -3,
+    damage: [MUL, [ROLL, 1, 12], PL]
+}
+
+const Tourbillon = {
+    ...Torpide,
+    damage: [MUL, [ROLL, 1, 8], PL]
+}
+
+const SuccionVampirique = {
+    ...Pulverisateur,
+    lifesteal: true,
+    damage: [MUL, [ROLL, 1, 8], PL]
+};
+
+const TransmissionVitale = {
+    ...SuccionVampirique,
+    damage: [MUL, [ROLL, 1, 10], [TARGET, PL]]
 };
 
 const PuissanceVitale = {
-    type: CardTypes.A,
+    type: A,
     canSave: false,
     canResist: false,
     canCancel: true,
     canRedirect: false,
-    play: [
-        [Roll, 1, 4],
-        [Source],
-        [PlayerPowerLevel],
-        [Heal]
-    ]
+    heal: [MUL, [ROLL, 1, 4], PL]
 };
 
-const PuissanceVitaleMajeure = {
-    ...PuissanceVitale,
-    play: [
-        [Roll, 1, 8],
-        [Source],
-        [PlayerPowerLevel],
-        [Heal]
-    ]
-};
-
-const PuissanceVitaleSuperieure = {
-    ...PuissanceVitale,
-    play: [
-        [Roll, 1, 10],
-        [Source],
-        [PlayerPowerLevel],
-        [Heal]
-    ]
-};
-
-const PuissanceVitaleSupreme = {
-    ...PuissanceVitale,
-    play: [
-        [Roll, 1, 12],
-        [Source],
-        [PlayerPowerLevel],
-        [Heal]
-    ]
-};
-
-const Pulverisateur = {
-    type: CardTypes.AD,
-    canSave: true,
-    canresist: true,
-    canCancel: true,
-    canRedirect: true,
-    play: [
-        [Roll, 1, 10],
-        [Source],
-        [PlayerPowerLevel],
-        [Damage]
-    ]
-};
-
-const RayonAcide = {
-    type: CardTypes.AD,
-    canSave: true,
-    canResist: true,
-    canCancel: true,
-    canRedirect: true,
-    play: [
-        [Roll, 1, 10],
-        [Source],
-        [PlayerPowerLevel],
-        [Damage],
-        [Roll, 1, 6],
-        [Equal, 1],
-        [Success, [
-            [ChooseEquipment],
-            [Discard]
-        ]]
-    ]
-};
-
-const RayonLaser = {
-    ...Pulverisateur
-};
+const PuissanceVitaleMajeure = { ...PuissanceVitale, heal: [MUL, [ROLL, 1, 8], PL] };
+const PuissanceVitaleSuperieure = { ...PuissanceVitale, heal: [MUL, [ROLL, 1, 10], PL] };
+const PuissanceVitaleSupreme = { ...PuissanceVitale, heal: [MUL, [ROLL, 1, 12], PL] };
 
 const SacrificeDEmmerlaus = {
-    type: CardTypes.E,
-    canSave: true,
+    type: E,
+    canSave: 0.5,
     canResist: false,
     canCancel: 2,
     canRedirect: false,
-    beforePlay: [
-        [Source],
-        [PlayerHitPoints],
-        [Choose],
-        [TargetEnemies]
-    ],
-    play: [
-        [Damage]
-    ],
-    resist: [
-        [Multiply, 0.5],
-        [Damage]
-    ]
+    target: OTHERS,
+    sacrifice: [CHOOSE, HP],
+    damage: [SACRIFICE]
 };
 
 const SanctuaireDEmmerlaus = {
-    type: CardTypes.E,
+    type: E,
     canSave: false,
     canResist: false,
     canCancel: false,
     canRedirect: false,
     counter: 1,
-    beforePlay: [
-        [Source],
-        [TargetPlayer]
-    ],
-    play: [
-        [Roll, 1, 8],
-        [Add, 25],
-        [Heal],
-        [Targettable, false]
-    ],
-    exitPlay: [
-        [Targettable, true]
-    ]
+    untargettable: true,
+    target: SELF,
+    heal: [ADD, 25, [MUL, [ROLL, 1, 8], PL]]
 };
 
 const Sommeil = {
-    type: CardTypes.S,
+    type: S,
     canSave: true,
     canResist: true,
     canCancel: true,
     canRedirect: true,
-    counter: 0,
-    beforePlay: [
-        [TargetLeft]
-    ],
-    play: [
-        [Inactive, true]
-    ],
-    exitPlay: [
-        [Inactive, false]
-    ]
-};
-
-const SouffleEnflamme = {
-    ...Pulverisateur,
-    play: [
-        [Roll, 1, 8],
-        [Source],
-        [PlayerPowerLevel],
-        [Add, 1],
-        [Mul]
-        [Damage]
-    ]
-};
-
-const SouffranceEmpirique = {
-    type: CardTypes.AM,
-    canSave: true,
-    canResist: true,
-    canCancel: false,
-    canRedirect: true,
-    play: [
-        [PlayerHitPoints],
-        [Mul, 0.5],
-        [Damage]
-    ]
-}
-
-const SpiraleDeFeu = {
-    ...Pulverisateur,
-    play: [
-        [Roll, 1, 10],
-        [Source],
-        [PlayerPowerLevel],
-        [Add, 1],
-        [Mul]
-        [Damage]
-    ]
-};
-
-const SuccionVampirique = {
-    ...Pulverisateur,
-    play: [
-        [Roll, 1, 8],
-        [Source],
-        [PlayerPowerLevel],
-        [Mul]
-        [Damage],
-        [Source],
-        [Heal]
-    ]
-};
-
-const SuperBouleDeFeu = {
-    ...Pulverisateur,
-    play: [
-        [Roll, 1, 20],
-        [Source],
-        [PlayerPowerLevel],
-        [Add, 1],
-        [Mul]
-        [Damage]
-    ]
+    counter: 1,
+    target: LEFT,
+    inactive: true
 };
 
 const Telepathie = {
-    type: CardTypes.S,
+    type: S,
     canSave: true,
     canResist: false,
     canCancel: false,
     canRedirect: true,
-    beforePlay: [
-        [TargetEnemy]
-    ],
-    play: [
-        [Source],
-        [HandVisibility, true],
-        [Target],
-        [Source],
-        [Confirm],
-        [HandVisibility, false]
-    ]
+    reveal: true,
+    target: OTHER
 }
 
 const TenebresDEmmerlaus = {
-    type: CardTypes.E,
-    canSave: true,
+    type: E,
+    canSave: 0.5,
     canResist: false,
     canCancel: false,
     canRedirect: false,
-    beforePlay: [
-        [Roll, 1, 12],
-        [PlayerPowerLevel],
-        [Mul],
-        [TargetEnemies]
-    ],
-    play: [
-        [Damage]
-    ],
-    resist: [
-        [Mul, 0.5],
-        [Damage]
-    ]
+    target: OTHERS,
+    damage: [MUL, [ROLL, 1, 12], PL]
 };
-*/
+
+const TransfertDeCorps = {
+    type: S,
+    canSave: true,
+    canResist: true,
+    canCancel: false,
+    canRedirect: false,
+    transfertBodies: true
+};
+
+const VitesseDouble = {
+    type: ST,
+    canSave: false,
+    canResist: false,
+    canCancel: false,
+    canRedirect: false,
+    target: SELF,
+    counter: 1,
+    haste: 2
+}
+
+const AnneauDePuissance1 = {
+    type: O,
+    powerLevel: 1
+};
+
+const AnneauDePuissance2 = { ...AnneauDePuissance1 };
+const AnneauDePuissance3 = { ...AnneauDePuissance1 };
+const AnneauDePuissance4 = { ...AnneauDePuissance1 };
+const AnneauDePuissance5 = { ...AnneauDePuissance1 };
+
+const AnneauDePuissance6 = { ...AnneauDePuissance1, powerLevel: 2 };
+const AnneauDePuissance7 = { ...AnneauDePuissance6 };
+const AnneauDePuissance8 = { ...AnneauDePuissance6 };
+
+const AnneauDePuissance9 = { ...AnneauDePuissance1, powerLevel: 3 };
+
+const AnneauDeResurrection = {
+    type: O,
+    resurrect: true
+};
+
+const RobeDAbsorption = {
+    type: O,
+    absorb: [ROLL, 1, 10]
+};
+
+const RobeDeProtection = {
+    type: O,
+    savingThrow: 2
+};
+
+const RobeDeProtection2 = {
+    type: O,
+    savingThrow: 3
+};

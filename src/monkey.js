@@ -79,3 +79,11 @@ monkey(Function, function id(x) {
 });
 
 monkey(Function, function noop() { });
+
+monkey(Object, function allKeys(obj) {
+    return [...Object.keys(obj), ...Object.getOwnPropertySymbols((obj))];
+});
+
+monkey(Object, function allValues(obj) {
+    return Object.allKeys(obj).map(key => obj[key]);
+});
