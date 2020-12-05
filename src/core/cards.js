@@ -2,6 +2,7 @@ const {
     CardTypes: { AM, AD, A, E, S, ST, O, CO },
     Calc: { MUL, ADD, PL, ROLL, HP, CHOOSE, SACRIFICE, CASTER, TARGET },
     Targets: { SELF, OTHER, OTHERS, LEFT, RIGHT },
+    Events
 } = require('./definitions');
 
 const PluieDeBoulesDeFeu = {

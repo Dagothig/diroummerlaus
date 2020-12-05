@@ -10,22 +10,23 @@ const {
 const cardTypesMap = {
     [CardTypes.AM]: card => ({
         target: Targets.OTHERS,
-        playable: true,
+        play: [Events.CARD, Events.DISCARD],
         ...card
     }),
     [CardTypes.A]: card => ({
         target: Targets.SELF,
-        playable: true,
+        play: [Events.CARD, Events.DISCARD],
         ...card
     }),
     [CardTypes.AD]: card => ({
-        playable: true,
+        target: Targets.OTHER,
+        play: [Events.CARD, Events.DISCARD],
         ...card
     }),
     [CardTypes.O]: card => ({
         target: Targets.SELF,
         counter: Number.POSITIVE_INFINITY,
-        playable: true,
+        play: [Events.EQUIP],
         ...card
     }),
     [CardTypes.E]: card => ({
@@ -55,78 +56,116 @@ const cardTypesMap = {
     })
 };
 
-function mapped(map) {
-    function FN(event) {
-        const [type] = event;
-        return map[type].call(this, event);
-    }
-    FN.types = Object.getOwnPropertySymbols(map);
-    return FN;
-}
-
-function Turn([, nextTurn = 0]) {
-    for (let i = 0; i < this.wizards.length; i++) {
-        const turn = (nextTurn + i) % this.wizards.length;
-        const wizard = this.wizards[turn];
-        if (wizard.isAlive) {
-            return [
-                [Events.COUNTER_DECREASE, wizard],
-                [Events.ACTIVATE_EFFECTS, wizard],
-                [Events.PLAY_CARD, wizard],
-                [Events.DISCARD_EXPIRED_EFFECTS, wizard],
-                [Events.TURN, (turn + 1) % this.wizards.length]
-            ];
+const Turn = {
+    [Events.TURN]([, nextTurn = 0]) {
+        for (let i = 0; i < this.wizards.length; i++) {
+            const turn = (nextTurn + i) % this.wizards.length;
+            const wizard = this.wizards[turn];
+            if (wizard.isAlive) {
+                return [
+                    [Events.COUNTER_DECREASE, wizard],
+                    [Events.ACTIVATE_EFFECTS, wizard],
+                    [Events.PLAY_CARD, wizard],
+                    [Events.DISCARD_EXPIRED_EFFECTS, wizard],
+                    [Events.TURN, (turn + 1) % this.wizards.length]
+                ];
+            }
         }
+        return [];
     }
-    return [];
 }
 
-Turn.types = [Events.TURN];
-
-async function Multi([, ...events]) {
-    await Promise.all(events.map(event => this.run(event)));
+const Multi = {
+    async [Events.ALL]([, ...events]) {
+        await Promise.all(events.map(event => this.run(event)));
+    }
 }
 
-Multi.types = [Events.ALL];
-
-const Phases = mapped({
-    [Events.COUNTER_DECREASE]: function ([, wizard]) {
+const Phases = {
+    [Events.COUNTER_DECREASE]([, wizard]) {
         wizard.effects.forEach(effect => effect.counter--);
     },
-    [Events.ACTIVATE_EFFECTS]: async function ([, wizard]) {
-        const canAsk = wizard.effects.filter(effect => effect.activate);
-        const { card, target } = this.ask(wizard, canAsk);
+    async [Events.ACTIVATE_EFFECTS]([, wizard]) {
+        const { card, target } = this.askCard(wizard, wizards.effects.filter(card => card.activate));
         return [[Events.CARD, wizard, card, target]];
     },
-    [Events.PLAY_CARD]: function ([, wizard]) {
-        const canAsk = wizard.hand.filter(card => card.playable);
-        const { card, target } = this.ask(wizard, canAsk);
-        return [
-            [Events.CARD, wizard, card, target],
-            [card.equip ? Events.EQUIP : card.effect ? Events.EFFECT : Events.DISCARD,
-                wizard, card, target
-            ]
-        ]
+    [Events.PLAY_CARD]([, wizard]) {
+        const { card, target } = this.askCard(wizard, wizard.hand.filter(card => card.play));
+        return card.play.map(type => [type, wizard, card, target]);
     },
-    [Events.DISCARD_EXPIRED_EFFECTS]: function ([, wizard]) {
+    [Events.DISCARD_EXPIRED_EFFECTS]([, wizard]) {
         const expired = wizard.effects.filter(effect => !effect.counter);
         return expired.map(card => [Events.DISCARD, wizard, card]);
     },
-    [Events.DRAW_MISSING]: function ([, wizard]) {
+    [Events.DRAW_MISSING]([, wizard]) {
         return [[Events.DRAW, wizard, Math.max(config.handSize - wizard.hand, 0)]];
     }
-});
+};
 
-function Discard([, wizard, card]) {
-    wizard.hand.remove(card) || wizard.effects.remove(card) || wizard.equip.remove(card);
-    return [];
+const Discard = {
+    [Events.DISCARD]([, wizard, card]) {
+        wizard.hand.remove(card) || wizard.effects.remove(card) || wizard.equip.remove(card);
+        return [];
+    }
+};
+
+const Equip = {
+    [Events.EQUIP]([, wizard, card]) {
+        wizard.hand.remove(card);
+        wizard.equip.push(card);
+        return [];
+    }
 }
 
-Discard.types = [Events.DISCARD];
+const Draw = {
+    [Events.DRAW]([, wizard, amount]) {
+        wizard.hand.push(...this.pile.take(amount));
+        return [];
+    }
+}
 
-function Draw([, wizard, amount]) {
-    wizard.hand.push(...this.pile.take(amount));
-    return [];
+const Card = {
+    [Events.CARD]([, wizard, card, target]) {
+        return [
+            [Events.DAMAGE, wizard, card, target],
+            [Events.HEAL, wizard, card, target],
+            []
+        ]
+    }
+}
+
+const TargetsHandler = {
+    [Targets.SELF](wizard) {
+        return [wizard];
+    },
+    [Targets.OTHER](wizard) {
+        return this.wizards.filter(w => w.isAlive).except(wizard);
+    },
+    [Targets.OTHERS](wizard) {
+        return [this.wizards.filter(w => w.isAlive).except(wizard)];
+    },
+    [Targets.LEFT](wizard) {
+        return this.wizards.findIndexFrom(
+            this.wizards.indexOf(wizard) - 1,
+            w => w.isAlive,
+            -1);
+    },
+    [Targets.RIGHT](wizard) {
+        return this.wizards.findIndexFrom(
+            this.wizards.indexOf(wizard) + 1,
+            w => w.isAlive);
+    }
+};
+
+class Wizard {
+    constructor(player,  { hitPoints }) {
+        this.player = player;
+        this.currentHitPoints = hitPoints;
+        this.maxHitPoints = hitPoints;
+        this.hand = [];
+        this.equip = [];
+        this.effects = [];
+    }
 }
 
 module.exports = class Game {
@@ -141,25 +180,66 @@ module.exports = class Game {
             Turn,
             Phases,
             Discard
-        ].reduce((transformers, fn) => {
-            fn.types.forEach(type => {
-                transformers[type] = transformers[type] || [];
-                transformers[type].push(fn);
-            });
+        ].reduce((transformers, t) => {
+            Object.getOwnPropertySymbols(t).forEach(type =>
+                (transformers[type] || (transformers[type] = [])).push(t[type]));
             return transformers;
         }, {});
-        this.wizards = players;
+
+        this.targets = TargetsHandler;
+
+        this.wizards = players.map(player => ({
+            player,
+            hitPoints: config.hitPoints,
+            hand: [],
+            equip: [],
+            effects: []
+        }));
+
         this.events = [
             [Events.ALL, ...this.wizards.map(wizard => [DRAW_MISSING, wizard])],
-            [Events.TURN]
-        ];
-        cards = cards.map(card => cardTypesMap[card.type](card));
+            [Events.TURN]];
+
+        this.cards = cards.map(card => cardTypesMap[card.type](card));
+
+        this.questions = [];
     }
 
     async run(events = this.events) {
         while (events.length) {
             const event = events.shift();
             events.unshift(...(await Promise.all(transformers.map(x => x(event)))).flat());
+        }
+    }
+
+    ask(question) {
+        if (!question.choices.length) {
+            return {};
+        }
+        const promise = new Promise(res => question.resolve = res);
+        this.questions.push(question);
+
+        return promise;
+    }
+
+    askCard(wizard, cards) {
+        return this.ask({
+            wizard,
+            choices: cards.map(card => {
+                const choices = this.targets[card.target || Targets.SELF].call(this, );
+            })
+        });
+    }
+
+    send(player, answer) {
+        const question = this.questions.find(question =>
+            question.wizard.name === player &&
+            question.choices.find(({ card, targets }) =>
+                card === answer.card &&
+                ((!targets && !answer.target) || (targets && targets).includes(answer.target))));
+        if (question) {
+            this.questions.remove(question);
+            question.resolve(answer);
         }
     }
 }

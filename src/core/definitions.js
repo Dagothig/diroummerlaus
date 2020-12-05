@@ -16,6 +16,9 @@ module.exports = {
         'DISCARD',
         'EQUIP',
         'EFFECT',
-        'DRAW'
+        'DRAW',
+        'CARD',
+        'DAMAGE',
+        'HEAL',
     ].symbols()
 };

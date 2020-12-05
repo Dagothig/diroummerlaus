@@ -1,3 +1,4 @@
+/* istanbul ignore next */
 function monkey(obj, fn) {
     obj[fn.name] && console.warn('Overriding existing function!');
     obj[fn.name] = fn;
@@ -39,12 +40,12 @@ monkey(Array.prototype, function symbols(fn = Function.id) {
     }, {});
 });
 
-monkey(Array.prototype, function findIndexFrom(start, filter) {
-    start = start % this.length
-    for (let i = start; i < this.length; i++)
+monkey(Array.prototype, function findIndexFrom(start, filter, direction = 1) {
+    start = (start + this.length) % this.length
+    for (let i = start; i < this.length; i += direction)
         if (filter(this[i], i))
             return i;
-    for (let i = 0; i < start; i++)
+    for (let i = 0; i < start; i += direction)
         if (filter(this[i], i))
             return i;
 });

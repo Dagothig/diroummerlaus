@@ -34,6 +34,7 @@ test('Array#ni', t => {
 test('Array#take', t => {
     const arr = ['a', 'b', 'c', 'd'];
 
+    t.deepEqual(['a'].take(), ['a']);
     t.deepEqual(arr.take(2), ['c', 'd']);
     t.deepEqual(arr.take(3), ['a', 'b']);
     t.deepEqual(arr.take(1), []);
@@ -72,6 +73,8 @@ test('Array#findIndexFrom', t => {
     t.is(arr.findIndexFrom(4, n => n[0] === 'a'), 0);
     t.is(arr.findIndexFrom(5, n => n[0] === 'a'), 0);
     t.is(arr.findIndexFrom(4, (_, i) => i === 3), 3);
+    t.is(arr.findIndexFrom(-1, n => n[0] === 'a'), 0);
+    t.is(arr.findIndexFrom(-1, n => n[0] === 'a', -1), 3);
 });
 
 test('Array#findEntry', t => {

@@ -18,3 +18,5 @@ test('Game pretends to handle all event types', t => {
     Object.values(Events).forEach(type =>
         t.truthy(game.transformers[type], `${ type.toString() } is not defined`));
 });
+
+test('Phases')

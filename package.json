@@ -8,7 +8,7 @@
   "scripts": {
     "test": "ava",
     "coverage": "nyc ava",
-    "watch-test": "watchexec -e js -r yarn ava"
+    "watch-test": "watchexec -e js -r yarn coverage"
   },
   "devDependencies": {
     "ava": "^3.13.0",
