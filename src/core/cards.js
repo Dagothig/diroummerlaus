@@ -1,8 +1,7 @@
 const {
     CardTypes: { AM, AD, A, E, S, ST, O, CO },
-    Calc: { MUL, ADD, PL, ROLL, HP, CHOOSE, SACRIFICE, CASTER, TARGET },
-    Targets: { SELF, OTHER, OTHERS, LEFT, RIGHT },
-    Events
+    Calc: { MUL, ADD, PL, ROLL, HP, CHOOSE, CASTER, TARGET },
+    Targets: { SELF, OTHER, OTHERS, LEFT, RIGHT }
 } = require('./definitions');
 
 const PluieDeBoulesDeFeu = {
@@ -20,7 +19,7 @@ const SouffranceEmpirique = {
     canResist: true,
     canCancel: false,
     canRedirect: true,
-    damage: [MUL, 0.5, [TARGET, HP]]
+    damage: [MUL, 0.5, [HP, TARGET]]
 };
 
 const VapeurExplosive = {
@@ -29,7 +28,7 @@ const VapeurExplosive = {
     canResist: true,
     canCancel: true,
     canRedirect: true,
-    damage: [MUL, [ROLL, 1, 12], [PL]]
+    damage: [MUL, [ROLL, 1, 12], PL]
 };
 
 const PotionDEnergie = {
@@ -41,7 +40,7 @@ const PotionDEnergie = {
     heal: [ROLL, 4, 6]
 };
 
-const PotionDEnergiMajeure = { ...PotionDEnergie, heal: [ROLL, 5, 10] };
+const PotionDEnergieMajeure = { ...PotionDEnergie, heal: [ROLL, 5, 10] };
 const PotionDEnergieSuperieure = { ...PotionDEnergie, heal: [ROLL, 6, 12] };
 const PotionDEnergieSupreme = { ...PotionDEnergie, heal: [ROLL, 1, 100] };
 
@@ -89,7 +88,7 @@ const SuccionVampirique = {
 
 const TransmissionVitale = {
     ...SuccionVampirique,
-    damage: [MUL, [ROLL, 1, 10], [TARGET, PL]]
+    damage: [MUL, [ROLL, 1, 10], [PL, TARGET]]
 };
 
 const PuissanceVitale = {
@@ -113,7 +112,7 @@ const SacrificeDEmmerlaus = {
     canRedirect: false,
     target: OTHERS,
     sacrifice: [CHOOSE, HP],
-    damage: [SACRIFICE]
+    damage: 'sacrifice'
 };
 
 const SanctuaireDEmmerlaus = {

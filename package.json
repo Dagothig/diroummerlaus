@@ -7,8 +7,9 @@
   "license": "MIT",
   "scripts": {
     "test": "ava",
+    "watch-test": "watchexec -e js -r yarn test",
     "coverage": "nyc ava",
-    "watch-test": "watchexec -e js -r yarn coverage"
+    "watch-coverage": "watchexec -e js -r yarn coverage"
   },
   "devDependencies": {
     "ava": "^3.13.0",

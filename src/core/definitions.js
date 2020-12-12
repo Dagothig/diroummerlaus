@@ -1,9 +1,11 @@
-module.exports = {
-    CardTypes: ['AM', 'A', 'AD', 'E', 'S', 'ST', 'O', 'CO', 'CA'].symbols(),
-    EventTypes: ['DRAW', 'QUESTION', 'PLAY', 'DAMAGE'].symbols(),
-    Calc: ['MUL', 'ADD', 'PL', 'ROLL', 'HP', 'CHOOSE', 'DMG', 'SACRIFICE', 'CASTER', 'TARGET'].symbols(),
+module.exports = Object.fromEntries(Object.entries({
+    CardTypes: ['AM', 'A', 'AD', 'E', 'S', 'ST', 'O', 'CO', 'CA'],
+    EventTypes: ['DRAW', 'QUESTION', 'PLAY', 'DAMAGE'],
+    Calc: ['MUL', 'ADD', 'PL', 'ROLL', 'HP', 'CHOOSE', 'CASTER', 'TARGET'],
     Fns: ['CASTER', 'TARGET'],
-    Targets: ['SELF', 'OTHER', 'OTHERS', 'LEFT', 'RIGHT'].symbols(),
+    Targets: ['SELF', 'OTHER', 'OTHERS', 'LEFT', 'RIGHT'],
+    Play: ['ACTIVATE', 'EQUIP', 'EFFECT'],
+    Control: ['CONTINUE'],
     Events: [
         'ALL',
         'TURN',
@@ -12,7 +14,6 @@ module.exports = {
         'ACTIVATE_EFFECTS',
         'PLAY_CARD',
         'DISCARD_EXPIRED_EFFECTS',
-        'PLAY',
         'DISCARD',
         'EQUIP',
         'EFFECT',
@@ -20,5 +21,8 @@ module.exports = {
         'CARD',
         'DAMAGE',
         'HEAL',
-    ].symbols()
-};
+        'SACRIFICE',
+        'CALC',
+        'STAT'
+    ]
+}).map(([key, values]) => [key, values.symbols()]));

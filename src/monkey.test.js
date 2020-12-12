@@ -75,6 +75,7 @@ test('Array#findIndexFrom', t => {
     t.is(arr.findIndexFrom(4, (_, i) => i === 3), 3);
     t.is(arr.findIndexFrom(-1, n => n[0] === 'a'), 0);
     t.is(arr.findIndexFrom(-1, n => n[0] === 'a', -1), 3);
+    t.is(arr.findIndexFrom(0, n => n[0] === 'd'), -1);
 });
 
 test('Array#findEntry', t => {

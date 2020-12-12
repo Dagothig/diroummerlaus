@@ -48,6 +48,7 @@ monkey(Array.prototype, function findIndexFrom(start, filter, direction = 1) {
     for (let i = 0; i < start; i += direction)
         if (filter(this[i], i))
             return i;
+    return -1;
 });
 
 monkey(Array.prototype, function findEntry(fn) {
@@ -59,8 +60,22 @@ monkey(Array, function gen(n, fn){
     return new Array(n).fill().map((_, i) => fn(i));
 });
 
-monkey(Array.prototype, function except(other) {
-    return this.filter(x => x !== other);
+monkey(Array.prototype, function except(...others) {
+    return this.filter(x => !others.includes(x));
+});
+
+monkey(Array.prototype, function findAsync(fn) {
+    return Promise.race([
+        Promise.race(this.map(promise => new Promise(async (resolve, reject) => {
+            try {
+                const result = await promise;
+                fn(result) && resolve(result);
+            } catch (err) {
+                reject(err);
+            }
+        }))),
+        Promise.all(this).then(Function.noop)
+    ]);
 });
 
 monkey(Math, function clip(x, min, max) {
@@ -87,4 +102,10 @@ monkey(Object, function allKeys(obj) {
 
 monkey(Object, function allValues(obj) {
     return Object.allKeys(obj).map(key => obj[key]);
+});
+
+monkey(Promise, function controller() {
+    let abort;
+    const abortPromise = new Promise(res => abort = res);
+    return { onAbort: abortPromise.then.bind(abortPromise), abort };
 });
