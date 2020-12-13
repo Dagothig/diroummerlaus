@@ -1,6 +1,6 @@
 const {
     CardTypes: { AM, AD, A, E, S, ST, O, CO },
-    Calc: { MUL, ADD, PL, ROLL, HP, CHOOSE, CASTER, TARGET },
+    Calc: { MUL, ADD, PL, ROLL, HP, CHOOSE, CASTER, TARGET, SACRIFICE },
     Targets: { SELF, OTHER, OTHERS, LEFT, RIGHT }
 } = require('./definitions');
 
@@ -112,7 +112,7 @@ const SacrificeDEmmerlaus = {
     canRedirect: false,
     target: OTHERS,
     sacrifice: [CHOOSE, HP],
-    damage: 'sacrifice'
+    damage: SACRIFICE
 };
 
 const SanctuaireDEmmerlaus = {

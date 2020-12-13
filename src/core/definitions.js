@@ -1,7 +1,7 @@
 module.exports = Object.fromEntries(Object.entries({
     CardTypes: ['AM', 'A', 'AD', 'E', 'S', 'ST', 'O', 'CO', 'CA'],
     EventTypes: ['DRAW', 'QUESTION', 'PLAY', 'DAMAGE'],
-    Calc: ['MUL', 'ADD', 'PL', 'ROLL', 'HP', 'CHOOSE', 'CASTER', 'TARGET'],
+    Calc: ['MUL', 'ADD', 'PL', 'ROLL', 'HP', 'CHOOSE', 'CASTER', 'TARGET', 'SACRIFICE'],
     Fns: ['CASTER', 'TARGET'],
     Targets: ['SELF', 'OTHER', 'OTHERS', 'LEFT', 'RIGHT'],
     Play: ['ACTIVATE', 'EQUIP', 'EFFECT'],
