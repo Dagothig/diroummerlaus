@@ -24,8 +24,8 @@ BLABLI
 
 # Concrètement
 
-Définir une pile d'événement
-Définir des archétypes de cartes pour voir le genre de périodes et de hooks qu'on doit supporter
-Définir un ptit moteur ni-serveur-ni-client
-Définir un serveur qui spin un ptit moteur pis qui lui pose des 'tites questions
-Voir node-bang pis pas reproduire le moteur
+* Définir une pile d'événement
+* Définir des archétypes de cartes pour voir le genre de périodes et de hooks qu'on doit supporter
+* Définir un ptit moteur ni-serveur-ni-client
+* Définir un serveur qui spin un ptit moteur pis qui lui pose des 'tites questions
+* Voir node-bang pis pas reproduire le moteur

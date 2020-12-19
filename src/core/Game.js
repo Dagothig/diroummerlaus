@@ -4,7 +4,8 @@ const {
     Calc,
     Targets,
     Play,
-    Zone
+    Zone,
+    Question
 } = require('./definitions');
 
 class Game {
@@ -64,22 +65,31 @@ class Game {
         this.listeners.remove(listener);
     }
 
-    event(type, payload) {
+    event(type, { wizard, cards, card, choices }) {
+        const payload = {
+            wizard: wizard?.player,
+            cards: cards?.map(({ id }) => id),
+            card: card?.id,
+            choices
+        };
+        console.log(payload);
         this.listeners.forEach(l => l(type, payload));
     }
 
-    async $ask(wizard, choices, controller) {
-        if (!choices.length) return [];
-        const question =  { player: wizard.player, choices, controller };
+    async $ask(question, controller) {
+        question.controller = controller;
         controller && controller.onAbort(() => question.resolve([]));
         const $promise = new $(res => question.resolve = res)
             .then(n => (this.questions.remove(question), n));
         this.questions.push(question);
-        this.event(Event.QUESTION, { wizard, choices });
+        this.event(Event.QUESTION, question);
         return $promise;
     }
 
     async $askCard(wizard, cards, controller) {
+        const question = this.$ask({
+        });
+        question.controller = controller;
         return this.$ask(wizard, cards.map(c => [c]), controller);
     }
 
@@ -108,6 +118,10 @@ class Game {
     }
 
     async $askCardWithTarget(wizard, cards, allowDiscard, controller) {
+        const question = {
+            wizard,
+            choices
+        };
         return this.$ask(
             wizard,
             cards.map(c => [
@@ -164,36 +178,27 @@ class Game {
     }
 
     async $activateCard({ wizard, card, targets }) {
-        if (card.canCancel) {
-            const ctl = $.controller();
-            const [target, cancelCards] = await targets
-                .map(async target => {
-                    const cancelCards = [];
-                    for (let i = 0; i < card.canCancel; i++) {
-                        const availableCards = target.hand.except(cancelCards).filter(c = c.cancel);
-                        const [card] = await this.$askCard(target, availableCards, ctl);
-                        if (!card) return [];
-                        cancelCards.push(card);
-                    }
-                    return [target, cancelCards];
-                })
-                .$find(x => x.length);
-            ctl.abort();
-
-            if (cancelCards.length) {
-                for (const cancelCard of cancelCards) {
-                    await this.$discard({ wizard: target, card: cancelCard });
-                }
-                return;
-            }
-        }
-
         const sacrifice = await this.$calc(card.sacrifice, { wizard, card, targets });
         if (sacrifice) {
             this.stat(wizard, 'hitPoints', -sacrifice);
         }
 
         await $.all(targets.map(async target => {
+            cancel: if (card.canCancel) {
+                const cancelCards = [];
+                for (let i = 0; i < card.canCancel; i++) {
+                    const [cancelCard] = await this.$askCard(
+                        target,
+                        target.hand.except(cancelCards).filter(c => c.cancel));
+                    if (!cancelCard) break cancel;
+                    cancelCards.push(cancelCard);
+                }
+                if (cancelCards.length) {
+                    await this.$discard({ wizard: target, cards: cancelCards });
+                    return;
+                }
+            }
+
             if (card.canRedirect) {
                 const [redirectCard] = await this.$askCard(target, target.hand.filter(c => c.redirect));
 

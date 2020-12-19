@@ -4,5 +4,6 @@ module.exports = Object.fromEntries(Object.entries({
     Calc: ['MUL', 'ADD', 'PL', 'ROLL', 'HP', 'CHOOSE', 'CASTER', 'TARGET', 'SACRIFICE'],
     Targets: ['SELF', 'OTHER', 'OTHERS', 'LEFT', 'RIGHT'],
     Play: ['ACTIVATE', 'EQUIP', 'EFFECT'],
-    Zone: ['TALON', 'PILE']
+    Zone: ['TALON', 'PILE'],
+    Question: ['SINGLE', 'COMBINED', 'CONTINUOUS']
 }).map(([key, values]) => [key, values.symbols()]));

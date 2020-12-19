@@ -1,5 +1,5 @@
 const test = require('ava');
-const { Game, cards, definitions: { Card, Calc, Targets, Event, Zone } } = require('.');
+const { Game, cards, definitions: { Card, Calc, Targets, Event } } = require('.');
 const AsyncQueue = require('./AsyncQueue');
 
 const baseArgs = {
@@ -33,33 +33,27 @@ test('Base turn', async t => {
     ] = await queue.$dequeue(4);
 
     t.is(drawP1, Event.DRAW);
-    t.like(drawP1Payload, {
-        wizard: { player: 'P1' },
-        cards: [{ id: 6 }, { id: 7 }, { id: 8 }, { id: 9 }, { id: 10 }]
-    });
+    t.like(drawP1Payload, { wizard: 'P1', cards: [6, 7, 8, 9, 10] });
 
     t.is(drawP2, Event.DRAW);
-    t.like(drawP2Payload, {
-        wizard: { player: 'P2' },
-        cards: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }]
-    });
+    t.like(drawP2Payload, { wizard: 'P2', cards: [1, 2, 3, 4, 5] });
 
     t.is(turn, Event.TURN);
-    t.like(turnPayload, { wizard: { player: 'P1' } });
+    t.like(turnPayload, { wizard: 'P1' });
 
     t.is(question, Event.QUESTION);
     t.like(questionPayload, {
-        wizard: { player: 'P1' },
+        wizard: 'P1',
         choices: [
-            [{ id: 6 }, [Zone.TALON]],
-            [{ id: 7 }, [Zone.TALON]],
-            [{ id: 8 }, [Zone.TALON]],
-            [{ id: 9 }, [Zone.TALON]],
-            [{ id: 10 }, [Zone.TALON]],
+            [6, [Targets.DISCARD]],
+            [7, [Targets.DISCARD]],
+            [8, [Targets.DISCARD]],
+            [9, [Targets.DISCARD]],
+            [10, [Targets.DISCARD]],
         ]
     });
 
-    game.send('P1', 0, 0);
+    game.send('P1', 6, Targets.DISCARD);
 
     const [
         [discard, discardPayload],
@@ -68,13 +62,13 @@ test('Base turn', async t => {
     ] = await queue.$dequeue(3);
 
     t.is(discard, Event.DISCARD);
-    t.like(discardPayload, { wizard: { player: 'P1' }, card: { id: 6 } });
+    t.like(discardPayload, { wizard: 'P1', card: 6 });
 
     t.is(drawMissing, Event.DRAW);
-    t.like(drawMissingPayload, { wizard: { player: 'P1' }, cards: [{ id: 0 }] });
+    t.like(drawMissingPayload, { wizard: 'P1', cards: [0] });
 
     t.is(newTurn, Event.TURN);
-    t.like(newTurnPayload, { wizard: { player: 'P2' } });
+    t.like(newTurnPayload, { wizard: 'P2' });
 
     game = null;
     queue = null;
