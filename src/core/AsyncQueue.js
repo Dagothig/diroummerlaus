@@ -2,6 +2,9 @@ module.exports = class AsyncQueue {
     constructor() {
         this.backing = [];
         this.awaiting = [];
+        this.enqueue = this.enqueue.bind(this);
+        this.$dequeue = this.$dequeue.bind(this);
+        this.$find = this.$find.bind(this);
     }
 
     enqueue(...values) {
@@ -14,7 +17,7 @@ module.exports = class AsyncQueue {
         }
     }
 
-    async dequeue(n = 1) {
+    async $dequeue(n = 1) {
         const taken = this.backing;
         this.backing = this.backing.slice(n);
         taken.length = Math.min(taken.length, n);
@@ -28,7 +31,7 @@ module.exports = class AsyncQueue {
         return taken;
     }
 
-    async find(fn) {
+    async $find(fn) {
         do {
             const [next] = await this.dequeue();
             if (fn(next)) {

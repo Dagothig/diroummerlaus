@@ -2,7 +2,8 @@ const test = require('ava');
 require('./monkey');
 
 test('Array#gen', t => {
-    t.deepEqual(Array.gen(3, Function.id), [0, 1, 2]);
+    t.deepEqual(Array.gen(2), [0, 1])
+    t.deepEqual(Array.gen(3, i => i * i), [0, 1, 4]);
 });
 
 test('Array#remove', t => {
@@ -13,12 +14,6 @@ test('Array#remove', t => {
 
     t.false(arr.remove('d'));
     t.deepEqual(arr, ['b', 'c']);
-});
-
-test('Array#shuffle', t => {
-    const arr = ['a', 'b', 'c'];
-
-    t.assert(arr.shuffle() instanceof Array);
 });
 
 test('Array#ni', t => {
@@ -80,11 +75,44 @@ test('Array#findIndexFrom', t => {
 
 test('Array#findEntry', t => {
     const arr = ['a', 'b', 'c'];
+    t.deepEqual(arr.findEntry(), [0, 'a']);
     t.deepEqual(arr.findEntry(v => v === 'b'), [1, 'b']);
 });
 
 test('Array#except', t => {
     t.deepEqual(['a', 'b', 'c'].except('b'), ['a', 'c']);
+});
+
+test('Array#sum', t => {
+    t.is([].sum(), 0);
+    t.is([1, 2].sum(), 3);
+    t.is([3, 5].sum(x => x * x), 34);
+});
+
+test('Array#prod', t => {
+    t.is([].prod(), 1);
+    t.is([2, 3].prod(), 6);
+    t.is([5, 6, 1].prod(n => n + 1), 84);
+});
+
+test('Array#$find', async t => {
+    let resolveA, resolveB, rejectC;
+    const promiseA = new Promise(res => resolveA = res);
+    const promiseB = new Promise(res => resolveB = res);
+    const promiseC = new Promise((_, rej) => rejectC = rej);
+    const $found = [promiseA, promiseB, promiseC].$find(n => n > 5);
+    resolveA(3);
+    resolveB(8);
+    rejectC("foo");
+    t.is(await $found, 8);
+
+    let rejectD, resolveE;
+    const promiseD = new Promise((_, rej) => rejectD = rej);
+    const promiseE = new Promise(res => resolveE = res);
+    const $foundError = [promiseD, promiseE].$find(Function.id);
+    rejectD(new Error());
+    resolveE("Yes");
+    await t.throwsAsync(() => $foundError);
 });
 
 test('Math#clip', t => {
@@ -116,6 +144,12 @@ test('Math#dice', t => {
     t.true(Math.abs(avg4d6 - exp) < 1);
 });
 
+test('Array#shuffle', t => {
+    const arr = ['a', 'b', 'c'];
+
+    t.assert(Math.shuffle(arr) instanceof Array);
+});
+
 test('Function#id', t => {
     t.is(Function.id('a'), 'a');
 });
@@ -134,4 +168,15 @@ test('Object#allValues', t => {
     const sym = Symbol("sym");
     const obj = { [sym]: 'foo', key: 'bar' };
     t.deepEqual(Object.allValues(obj), ['bar', 'foo']);
+});
+
+test('$#controller', async t => {
+    const ctl = $.controller();
+    const $promise = new $((_, rej) => ctl.onAbort(rej));
+    ctl.abort();
+    try {
+        await $promise;
+    } catch {
+        t.pass();
+    }
 });

@@ -9,10 +9,14 @@
     "test": "ava",
     "watch-test": "watchexec -e js -r yarn test",
     "coverage": "nyc ava",
-    "watch-coverage": "watchexec -e js -r yarn coverage"
+    "watch-coverage": "watchexec -e js -r yarn coverage",
+    "cli": "node src/cli"
   },
   "devDependencies": {
     "ava": "^3.13.0",
     "nyc": "^15.1.0"
+  },
+  "dependencies": {
+    "socket.io": "^3.0.4"
   }
 }
