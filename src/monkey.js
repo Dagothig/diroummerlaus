@@ -50,6 +50,10 @@ monkey(Array.prototype, function findIndexFrom(start, filter, direction = 1) {
     return -1;
 });
 
+monkey(Array.prototype, function findFrom(start, filter, direction) {
+    return this[this.findIndexFrom(start, filter, direction)];
+});
+
 monkey(Array.prototype, function findEntry(fn = Function.id) {
     const index = this.findIndex(fn);
     return [index, this[index]];

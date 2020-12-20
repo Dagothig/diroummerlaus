@@ -73,6 +73,11 @@ test('Array#findIndexFrom', t => {
     t.is(arr.findIndexFrom(0, n => n[0] === 'd'), -1);
 });
 
+test('Array#findFrom', t => {
+    const arr = ['a1', 'b', 'c', 'a2', 'e'];
+    t.is(arr.findFrom(2, n => n[0] === 'a'), 'a2');
+});
+
 test('Array#findEntry', t => {
     const arr = ['a', 'b', 'c'];
     t.deepEqual(arr.findEntry(), [0, 'a']);

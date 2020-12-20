@@ -1,5 +1,9 @@
 const test = require('ava');
-const { Game, cards, definitions: { Card, Calc, Targets, Event } } = require('.');
+const {
+    Game,
+    cards,
+    definitions: { Card, Event, Calc, Targets, Play, Zone }
+} = require('.');
 const AsyncQueue = require('./AsyncQueue');
 
 const baseArgs = {
@@ -17,13 +21,13 @@ function getGame(args) {
 
     game.onEvent((t, p) => queue.enqueue([t, p]));
 
-    return [game, queue];
+    const $run = game.$run();
+
+    return [game, queue, $run];
 }
 
 test('Base turn', async t => {
-    let [game, queue] = getGame({ cards: Array.gen(11, i => ({ id: i })) });
-
-    game.$run();
+    const [game, queue] = getGame({ cards: Array.gen(11, i => ({ id: i })) });
 
     const [
         [drawP1, drawP1Payload],
@@ -45,15 +49,15 @@ test('Base turn', async t => {
     t.like(questionPayload, {
         wizard: 'P1',
         choices: [
-            [6, [Targets.DISCARD]],
-            [7, [Targets.DISCARD]],
-            [8, [Targets.DISCARD]],
-            [9, [Targets.DISCARD]],
-            [10, [Targets.DISCARD]],
+            [6, [Zone.TALON]],
+            [7, [Zone.TALON]],
+            [8, [Zone.TALON]],
+            [9, [Zone.TALON]],
+            [10, [Zone.TALON]],
         ]
     });
 
-    game.send('P1', 6, Targets.DISCARD);
+    game.send('P1', 6, Zone.TALON);
 
     const [
         [discard, discardPayload],
@@ -69,16 +73,99 @@ test('Base turn', async t => {
 
     t.is(newTurn, Event.TURN);
     t.like(newTurnPayload, { wizard: 'P2' });
-
-    game = null;
-    queue = null;
 });
 
-test.todo('Card types');
+test('Play card types', async t => {
+    const cards = [
+        { id: 'play', play: Play.ACTIVATE, target: Targets.SELF },
+        { id: 'effect', play: Play.EFFECT, target: Targets.SELF },
+        { id: 'equip', play: Play.EQUIP, target: Targets.SELF }
+    ];
 
-test.todo('Play card types');
+    const [game, queue] = getGame({ cards });
 
-test.todo('Target types')
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'play', Zone.UNSPECIFIED);
+
+    const [[activate, activatePayload], [discard, discardPayload]] = await queue.$dequeue(2);
+    t.is(activate, Event.ACTIVATE);
+    t.like(activatePayload, { wizard: 'P1', card: 'play', targets: ['P1'] });
+    t.is(discard, Event.DISCARD);
+    t.like(discardPayload, { wizard: 'P1', card: 'play' });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'effect', Zone.UNSPECIFIED);
+
+    const [[effect, effectPayload]] = await queue.$dequeue();
+    t.is(effect, Event.AFFECT);
+    t.like(effectPayload, { wizard: 'P1', card: 'effect', targets: ['P1'] });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'equip', Zone.UNSPECIFIED);
+
+    const [[equip, equipPayload]] = await queue.$dequeue();
+    t.is(equip, Event.EQUIP);
+    t.like(equipPayload, { wizard: 'P1', card: 'equip', targets: ['P1'] });
+});
+
+test('Target types', async t => {
+    const cards = [
+        { id: 'self', play: Play.EQUIP, target: Targets.SELF },
+        { id: 'other', play: Play.EQUIP, target: Targets.OTHER },
+        { id: 'others', play: Play.EQUIP, target: Targets.OTHERS },
+        { id: 'left', play: Play.EQUIP, target: Targets.LEFT },
+        { id: 'right', play: Play.EQUIP, target: Targets.RIGHT }
+    ];
+
+    const [game, queue] = getGame({ cards, players: [...baseArgs.players, 'P3'] });
+
+    // Self
+    const [, q1p] = await queue.$find(([type]) => type === Event.QUESTION);
+    t.like(q1p, {
+        wizard: 'P1',
+        choices: [
+            ['self', [Zone.UNSPECIFIED, Zone.TALON]],
+            ['other', ['P2', 'P3', Zone.TALON]],
+            ['others', [Zone.UNSPECIFIED, Zone.TALON]],
+            ['left', [Zone.UNSPECIFIED, Zone.TALON]],
+            ['right', [Zone.UNSPECIFIED, Zone.TALON]]
+        ]
+    });
+
+    game.send('P1', 'self', Zone.UNSPECIFIED);
+
+    const [[self, selfp]] = await queue.$dequeue();
+    t.is(self, Event.EQUIP);
+    t.like(selfp, { wizard: 'P1', card: 'self', targets: ['P1'] });
+
+    // Other
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'other', 'P2');
+
+    const [[, otherp]] = await queue.$dequeue();
+    t.like(otherp, { wizard: 'P1', card: 'other', targets: ['P2'] });
+
+    // Others
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'others', Zone.UNSPECIFIED);
+
+    const [[, othersp]] = await queue.$dequeue();
+    t.like(othersp, { wizard: 'P1', card: 'others', targets: ['P2', 'P3'] });
+
+    // Left
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'left', Zone.UNSPECIFIED);
+
+    const [[, leftp]] = await queue.$dequeue();
+    t.like(leftp, { wizard: 'P1', card: 'left', targets: ['P3'] });
+
+    // Right
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'right', Zone.UNSPECIFIED);
+
+    const [[, rightp]] = await queue.$dequeue();
+    t.like(rightp, { wizard: 'P1', card: 'right', targets: ['P2'] });
+});
 
 test.todo('Death');
 
@@ -131,3 +218,5 @@ test.todo('Cancels');
 test.todo('Multi-cancels');
 
 test.todo('Redirects');
+
+test.todo('Card types');

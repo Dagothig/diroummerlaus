@@ -32,11 +32,11 @@ module.exports = class AsyncQueue {
     }
 
     async $find(fn) {
-        do {
-            const [next] = await this.dequeue();
+        while(true) {
+            const [next] = await this.$dequeue();
             if (fn(next)) {
                 return next;
             }
-        } while(true);
+        }
     }
 }
