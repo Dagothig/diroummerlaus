@@ -29,12 +29,21 @@ class Game {
         [Card.CA]: { react: Play.EFFECT }
     }
 
+    static turnPhases = [
+        '$counterDecrease',
+        '$activateEffects',
+        '$playCard',
+        '$discardExpiredEffects',
+        '$drawMissingCards'
+    ]
+
     constructor({ config, cards, players, rng = Math }) {
         const game = this;
+        this.rng = rng;
         this.listeners = [];
         this.config = { ...Game.defaultConfig, ...config };
         this.rng = rng;
-        this.wizards = rng.shuffle(players.map((player, i) => ({
+        this.wizards = this.rng.shuffle(players.map((player, i) => ({
             turn: i,
             stat(key) {
                 return (
@@ -47,13 +56,13 @@ class Game {
             hand: [],
             equip: [],
             effects: [],
+            isAlive: true,
             get maxHitPoints() { return game.config.hitPoints },
-            get isAlive() { return this.hitPoints > 0; },
             get powerLevel() { return this.stat('powerLevel'); },
             get savingThrow() { return this.stat('savingThrow'); }
         })));
 
-        this.pile = rng.shuffle(cards.map(c => ({ ...Game.cardTypes[c.type], ...c })));
+        this.pile = this.rng.shuffle(cards.map(c => ({ ...Game.cardTypes[c.type], ...c })));
         this.talon = [];
         this.questions = [];
     }
@@ -66,13 +75,15 @@ class Game {
         this.listeners.remove(listener);
     }
 
-    event(type, { wizard, cards, card, choices, targets }) {
+    event(type, { wizard, cards, card, choices, targets, winners, hitPoints }) {
         const payload = {
             wizard: wizard?.player,
             cards: cards?.map(({ id }) => id),
             card: card?.id,
             targets: targets?.map(({ player }) => player),
+            winners: winners?.map(({ player }) => player),
             choices,
+            hitPoints
         };
         this.listeners.forEach(l => l(type, payload));
     }
@@ -150,14 +161,14 @@ class Game {
     }
 
     roll(amount, sides) {
-        return rng.dice(amount, sides);
+        return this.rng.dice(amount, sides);
     }
 
-    async $calc(value, env) {
+    async _$calc(value, env) {
         const { wizard, target, sacrifice = 0 } = env;
         switch (typeof value) {
             case 'object':
-                const args = await $.all(value.slice(1).map(n => this.$calc(n, env)));
+                const args = await $.all(value.slice(1).map(n => this._$calc(n, env)));
                 switch (args.length && value[0]) {
                     case Calc.MUL: return args.prod();
                     case Calc.ADD: return args.sum();
@@ -169,7 +180,7 @@ class Game {
                         return (
                             (await $.all(args.map(n => this.$askNumber({ wizard, number: n }))))
                             .sum());
-                    default: return await this.$calc(value[0], env);
+                    default: return await this._$calc(value[0], env);
                 }
             case 'symbol':
                 switch (value) {
@@ -184,6 +195,10 @@ class Game {
             case 'number': return value;
             default: return 0;
         }
+    }
+
+    async $calc(value, env) {
+        return Math.ceil(await this._$calc(value, env));
     }
 
     async $activateCard({ wizard, card, targets }) {
@@ -289,6 +304,7 @@ class Game {
 
     stat(wizard, stat, amount) {
         wizard[stat] += amount;
+        this.event(Event.STAT, { wizard, [stat]: amount });
     }
 
     async $run() {
@@ -297,17 +313,17 @@ class Game {
         while (turn !== (turn = this.wizards.findIndexFrom(turn + 1, wizard => wizard.isAlive))) {
             const wizard = this.wizards[turn];
             this.event(Event.TURN, { wizard });
-            await this.$counterDecrease({ wizard });
-            await this.$activateEffects({ wizard });
-            await this.$playCard({ wizard });
-            await this.$discardExpiredEffects({ wizard });
-            await this.$drawMissingCards({ wizard });
+            for (const phase of Game.turnPhases) {
+                await this[phase]({ wizard });
+                await this.$checkDeaths();
+            }
 
             // TODO this condition is shyte
             if (this.wizards.every(w => !w.hand.length) && !this.pile.length) {
                 break;
             }
         }
+        this.event(Event.END, { winners: this.wizards.filter(w => w.isAlive) });
     }
 
     async $counterDecrease({ wizard }) {
@@ -363,6 +379,13 @@ class Game {
 
     async $drawMissingCards({ wizard }) {
         await this.$draw({ wizard, amount: Math.max(this.config.handSize - wizard.hand.length, 0) });
+    }
+
+    async $checkDeaths() {
+        for (const wizard of this.wizards.filter(w => w.isAlive && w.hitPoints <= 0)) {
+            wizard.isAlive = false;
+            this.event(Event.DEATH, { wizard });
+        }
     }
 };
 

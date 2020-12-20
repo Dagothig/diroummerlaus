@@ -167,19 +167,133 @@ test('Target types', async t => {
     t.like(rightp, { wizard: 'P1', card: 'right', targets: ['P2'] });
 });
 
-test.todo('Death');
+test('Damage', async t => {
+    const [game, queue] = getGame({ cards: [
+        { id: 'dmg', damage: 5, target: Targets.OTHER, play: Play.ACTIVATE }
+    ] });
 
-test.todo('Calculations based on power-level');
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg', 'P2');
 
-test.todo('Calculations based on hp');
+    const [
+        [activate],
+        [damage, damagePayload],
+        [discard]
+    ] = await queue.$dequeue(3);
 
-test.todo('Calculations with rolls');
+    t.is(activate, Event.ACTIVATE);
+    t.is(damage, Event.STAT);
+    t.like(damagePayload, { wizard: 'P2', hitPoints: -5 });
+    t.is(discard, Event.DISCARD);
+});
 
-test.todo('Calculations with math');
+test('Death', async t => {
+    const [game, queue] = getGame({ cards: [
+        { id: 'dmg', damage: 50, target: Targets.OTHER, play: Play.ACTIVATE }
+    ] });
 
-test.todo('Damage');
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg', 'P2');
 
-test.todo('Heal');
+    const [, deathPayload] = await queue.$find(([type]) => type === Event.DEATH);
+    t.like(deathPayload, { wizard: 'P2' });
+
+    const [, endPayload] = await queue.$find(([type]) => type === Event.END);
+    t.like(endPayload, { winners: ['P1'] });
+});
+
+test('Calculations based on power-level', async t => {
+    const [game, queue] = getGame({
+        config: { ...Game.defaultConfig, handSize: 1 },
+        cards: [
+            {
+                id: 'dmg',
+                target: Targets.OTHER,
+                play: Play.ACTIVATE,
+                damage: [Calc.ADD, 1, [Calc.MUL, 5, Calc.PL]]
+            },
+            {
+                id: 'ring',
+                target: Targets.OTHER,
+                play: Play.EQUIP,
+                powerLevel: 1
+            }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'ring', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'dmg', 'P1');
+
+    const [, stat] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat, { hitPoints: -11 });
+});
+
+test('Calculations based on hp', async t => {
+    const [game, queue] = getGame({
+        config: { ...Game.defaultConfig, handSize: 1 },
+        cards: [
+            {
+                id: 'dmgHalfSelf',
+                target: Targets.SELF,
+                play: Play.ACTIVATE,
+                damage: [Calc.MUL, 0.5, Calc.HP]
+            },
+            {
+                id: 'dmgHalfTarget',
+                target: Targets.OTHER,
+                play: Play.ACTIVATE,
+                damage: [Calc.MUL, 0.5, [Calc.HP, Calc.TARGET]]
+            }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmgHalfTarget', 'P2');
+
+    const [, statHalfTarget] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(statHalfTarget, { hitPoints: -25 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'dmgHalfSelf', Zone.UNSPECIFIED);
+
+    const [, statHalfSelf] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(statHalfSelf, { hitPoints: -13 });
+});
+
+test('Calculations with rolls', async t => {
+    const [game, queue] = getGame({
+        config: { ...Game.defaultConfig, handSize: 1 },
+        cards: [
+            {
+                id: 'dmg',
+                target: Targets.OTHER,
+                play: Play.ACTIVATE,
+                damage: [Calc.ROLL, 3, 6]
+            }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg', 'P2');
+
+    const [, stat] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat, { hitPoints: -11 });
+});
+
+test('Heal', async t => {
+    const [game, queue] = getGame({ cards: [
+        { id: 'heal', heal: 5, target: Targets.OTHER, play: Play.ACTIVATE }
+    ] });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'heal', 'P2');
+
+    const [, stat] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat, { hitPoints: 5 });
+});
 
 test.todo('Acid');
 
