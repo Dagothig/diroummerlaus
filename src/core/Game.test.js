@@ -175,11 +175,7 @@ test('Damage', async t => {
     await queue.$find(([type]) => type === Event.QUESTION);
     game.send('P1', 'dmg', 'P2');
 
-    const [
-        [activate],
-        [damage, damagePayload],
-        [discard]
-    ] = await queue.$dequeue(3);
+    const [[activate], [damage, damagePayload], [discard]] = await queue.$dequeue(3);
 
     t.is(activate, Event.ACTIVATE);
     t.is(damage, Event.STAT);
@@ -295,7 +291,167 @@ test('Heal', async t => {
     t.like(stat, { hitPoints: 5 });
 });
 
-test.todo('Acid');
+test('Saves', async t => {
+    const diceRolls = [5, 5, 15];
+    const rng = { ...baseArgs.rng, dice: diceRolls.shift.bind(diceRolls) };
+    const [game, queue] = getGame({
+        rng,
+        cards: [
+            { id: 'dmg1', damage: 5, canSave: true, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'dmg2', damage: 5, canSave: 0.5, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'dmg3', damage: 5, canSave: true, target: Targets.OTHER, play: Play.ACTIVATE }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg1', 'P2');
+
+    const [[activate1], [save1, save1Payload], [dmg1, dmg1Payload]] = await queue.$dequeue(3);
+
+    t.is(activate1, Event.ACTIVATE);
+    t.is(save1, Event.SAVE);
+    t.like(save1Payload, { wizard: 'P1', targets: ['P2'] });
+    t.is(dmg1, Event.STAT);
+    t.like(dmg1Payload, { wizard: 'P2', hitPoints: -0 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg2', 'P2');
+
+    const [, dmg2] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(dmg2, { hitPoints: -3 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg3', 'P2');
+
+    const [, dmg3] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(dmg3, { hitPoints: -5 });
+});
+
+test('Resists', async t => {
+    const [game, queue] = getGame({
+        config: { ...Game.defaultConfig, handSize: 1 },
+        cards: [
+            { id: 'resist', savingThrow: Calc.PL, target: Targets.SELF, react: Play.EFFECT },
+            { id: 'dmg', damage: 5, canSave: true, canResist: true, target: Targets.OTHER, play: Play.ACTIVATE }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'resist', Zone.UNSPECIFIED);
+
+    const [
+        [resist, resistPayload],
+        [save, savePayload],
+        [dmg, dmgPayload]
+    ] = await queue.$dequeue(3);
+
+    t.is(resist, Event.AFFECT);
+    t.like(resistPayload, { wizard: 'P2', card: 'resist', targets: ['P2'] });
+    t.is(save, Event.SAVE);
+    t.like(savePayload, { wizard: 'P1', card: 'dmg', targets: ['P2'] });
+    t.is(dmg, Event.STAT);
+    t.like(dmgPayload, { wizard: 'P2', hitPoints: -0 });
+});
+
+test('Cancels', async t => {
+    const [game, queue] = getGame({
+        config: { ...Game.defaultConfig, handSize: 3 },
+        cards: [
+            { id: 'dmg3', damage: 5, canCancel: 2, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'cancel4', cancel: true },
+            { id: 'cancel3', cancel: true },
+            { id: 'dmg2', damage: 5, canCancel: 2, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'cancel2', cancel: true },
+            { id: 'cancel1', cancel: true },
+            { id: 'dmg1', damage: 5, canCancel: true, target: Targets.OTHER, play: Play.ACTIVATE },
+        ]
+    });
+
+    // A card requiring a single cancel
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg1', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'cancel3');
+
+    const [
+        [cancel],
+        [discardCancel, discardCancelPayload],
+        [discardDmg, discardDmgPayload]
+    ] = await queue.$dequeue(3);
+
+    t.is(cancel, Event.CANCEL);
+    t.is(discardCancel, Event.DISCARD);
+    t.like(discardCancelPayload, { wizard: 'P2', card: 'cancel3' });
+    t.is(discardDmg, Event.DISCARD);
+    t.like(discardDmgPayload, { wizard: 'P1', card: 'dmg1' });
+
+    // A card requiring two cancels met with two cancel cards.
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'dmg2', 'P1');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'cancel1');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'cancel2');
+
+    const [
+        [cancel2],
+        [discardCancel2, discardCancel2Payload],
+        [discardCancel3, discardCancel3Payload],
+        [discardDmg2, discardDmg2Payload]
+    ] = await queue.$dequeue(4);
+
+    t.is(cancel2, Event.CANCEL);
+    t.is(discardCancel2, Event.DISCARD);
+    t.like(discardCancel2Payload, { wizard: 'P1', card: 'cancel1' });
+    t.is(discardCancel3, Event.DISCARD);
+    t.like(discardCancel3Payload, { wizard: 'P1', card: 'cancel2' });
+    t.is(discardDmg2, Event.DISCARD);
+    t.like(discardDmg2Payload, { wizard: 'P2', card: 'dmg2' });
+
+    // A card requiring two cancels met with a single cancel card.
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg3', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'cancel4');
+
+    const [[damage, damagePayload], [discard]] = await queue.$dequeue(3);
+
+    t.is(damage, Event.STAT);
+    t.like(damagePayload, { wizard: 'P2', hitPoints: -5 });
+    t.is(discard, Event.DISCARD);
+});
+
+test.todo('Redirects');
+
+test.todo('Acid'/*, async t => {
+    const [game, queue] = getGame({
+        config: { ...Game.defaultConfig, handSize: 1 },
+        cards: [
+            { id: 'item', target: Targets.SELF, play: Play.EQUIP },
+            { id: 'acid', damage: 1, acid: true, target: Targets.OTHER, play: Play.ACTIVATE }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'item', Zone.UNSPECIFIED);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'acid', 'P1');
+
+    const [
+        []
+    ]
+
+    const [, stat] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat, { hitPoints: 5 });
+}*/);
 
 test.todo('Lifesteal');
 
@@ -320,17 +476,5 @@ test.todo('Saving throw bonuses');
 test.todo('Power level bonuses');
 
 test.todo('Counter');
-
-test.todo('Saves');
-
-test.todo('Partial saves');
-
-test.todo('Resists');
-
-test.todo('Cancels');
-
-test.todo('Multi-cancels');
-
-test.todo('Redirects');
 
 test.todo('Card types');
