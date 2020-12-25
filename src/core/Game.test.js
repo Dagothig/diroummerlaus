@@ -200,7 +200,7 @@ test('Death', async t => {
 
 test('Calculations based on power-level', async t => {
     const [game, queue] = getGame({
-        config: { ...Game.defaultConfig, handSize: 1 },
+        config: { handSize: 1 },
         cards: [
             {
                 id: 'dmg',
@@ -229,7 +229,7 @@ test('Calculations based on power-level', async t => {
 
 test('Calculations based on hp', async t => {
     const [game, queue] = getGame({
-        config: { ...Game.defaultConfig, handSize: 1 },
+        config: { handSize: 1 },
         cards: [
             {
                 id: 'dmgHalfSelf',
@@ -261,7 +261,7 @@ test('Calculations based on hp', async t => {
 
 test('Calculations with rolls', async t => {
     const [game, queue] = getGame({
-        config: { ...Game.defaultConfig, handSize: 1 },
+        config: { handSize: 1 },
         cards: [
             {
                 id: 'dmg',
@@ -329,7 +329,7 @@ test('Saves', async t => {
 
 test('Resists', async t => {
     const [game, queue] = getGame({
-        config: { ...Game.defaultConfig, handSize: 1 },
+        config: { handSize: 1 },
         cards: [
             { id: 'resist', savingThrow: Calc.PL, target: Targets.SELF, react: Play.EFFECT },
             { id: 'dmg', damage: 5, canSave: true, canResist: true, target: Targets.OTHER, play: Play.ACTIVATE }
@@ -358,7 +358,7 @@ test('Resists', async t => {
 
 test('Cancels', async t => {
     const [game, queue] = getGame({
-        config: { ...Game.defaultConfig, handSize: 3 },
+        config: { handSize: 3 },
         cards: [
             { id: 'dmg3', damage: 5, canCancel: 2, target: Targets.OTHER, play: Play.ACTIVATE },
             { id: 'cancel4', cancel: true },
@@ -428,11 +428,32 @@ test('Cancels', async t => {
     t.is(discard, Event.DISCARD);
 });
 
-test.todo('Redirects');
+test.only('Redirects', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'redirect', redirect: true },
+            { id: 'dmg', damage: 5, canRedirect: true, target: Targets.OTHER, play: Play.ACTIVATE },
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'redirect');
+
+    const [[discardRedirect], [damage, damagePayload], [discard]] = await queue.$dequeue(3);
+
+    t.is(discardRedirect, Event.DISCARD);
+    t.is(damage, Event.STAT);
+    t.like(damagePayload, { wizard: 'P1', hitPoints: -5 });
+    t.is(discard, Event.DISCARD);
+});
 
 test.todo('Acid'/*, async t => {
     const [game, queue] = getGame({
-        config: { ...Game.defaultConfig, handSize: 1 },
+        config: { handSize: 1 },
         cards: [
             { id: 'item', target: Targets.SELF, play: Play.EQUIP },
             { id: 'acid', damage: 1, acid: true, target: Targets.OTHER, play: Play.ACTIVATE }
