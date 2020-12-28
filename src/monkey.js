@@ -124,3 +124,7 @@ monkey($, function controller() {
     const abortPromise = new $(res => abort = res);
     return { onAbort: abortPromise.then.bind(abortPromise), abort, $abort: abortPromise };
 });
+
+monkey(String.prototype, function pascal() {
+    return this[0].toUpperCase() + this.slice(1);
+})
