@@ -1,19 +1,15 @@
-const {
-    Card,
-    Event,
-    Calc,
-    Targets,
-    Play,
-    Zone,
-    Question
-} = require('./definitions');
+const { Card, Event, Calc, Targets, Play, Zone, Item } = require('./definitions');
 
 class Game {
     static defaultConfig = {
         powerLevel: 1,
         savingThrow: 10,
         hitPoints: 50,
-        handSize: 5
+        handSize: 5,
+        itemLimits: {
+            [Item.RING]: 2,
+            [Item.ROBE]: 1,
+        }
     };
 
     static cardTypes = {
@@ -92,10 +88,7 @@ class Game {
     }
 
     async $ask(question) {
-        /*console.log("$ask");
-        console.trace();
-        console.log(question.wizard.player, question.choices);*/
-        if (question.choices && !question.choices.length) {
+        if (!question.choices?.length && !question.max) {
             return [];
         }
         const $promise = new $(res => question.resolve = res)
@@ -110,7 +103,7 @@ class Game {
         if (!question) return;
         if (choice) {
             if (question.choices) {
-                const [answer, subChoices] = question.choices.find(([primary]) => choice === primary) || [];
+                const [answer, subChoices] = question.choices.find(([c]) => choice === c) || [];
                 const subAnswer = subChoices?.find(secondary => subChoice === secondary);
                 return (!(subChoices?.length) || subAnswer) && question.resolve([answer, subAnswer]);
             }
@@ -169,7 +162,7 @@ class Game {
     }
 
     async $askNumber({ wizard, number }) {
-        return this.$ask({ wizard, min: 1, max: number })[0];
+        return (await this.$ask({ wizard, min: 1, max: number }))[0];
     }
 
     roll(amount, sides) {
@@ -202,6 +195,7 @@ class Game {
                     case Calc.CASTER: return wizard;
                     case Calc.TARGET: return target;
                     case Calc.SACRIFICE: return sacrifice;
+                    case Calc.ALIVE: return this.wizards.filter(w => w.isAlive).length;
                     default: return 0;
                 }
             case 'number': return value;
@@ -213,71 +207,76 @@ class Game {
         return Math.ceil(await this._$calc(value, env));
     }
 
-    async $activateCard({ wizard, card, targets }) {
+    async $react({ wizard, card, target, multiplier = 1 }) {
+        const [reactCard, reactTargets] = await this.$askCardWithTarget({
+            wizard: target,
+            action: 'react',
+            cards: target.hand.filter(c =>
+                (card.canCancel && c.cancel) ||
+                (card.canRedirect && c.redirect) ||
+                (card.canResist && c.react))
+        });
+
+        cancel:
+        if (card.canCancel && reactCard?.cancel) {
+            const cancelCards = [reactCard];
+            for (let i = 1; i < card.canCancel; i++) {
+                const cancelCard = await this.$askCard({
+                    wizard: target,
+                    cards: target.hand.filter(c => !cancelCards.includes(c) && c.cancel)
+                });
+                if (!cancelCard) break cancel;
+                cancelCards.push(cancelCard);
+            }
+            this.event(Event.CANCEL, { wizard, targets: [target], card, cards: cancelCards });
+            for (const cancelCard of cancelCards)
+                await this.$discard({ wizard: target, card: cancelCard });
+            return { cancelled: true };
+        }
+
+        if (card.canRedirect && reactCard?.redirect) {
+            await this.$discard({ wizard: target, card: reactCard });
+            target = wizard;
+        }
+
+        if (card.canResist && reactCard?.react) {
+            await this.$playCard({ wizard: target, card: reactCard, targets: reactTargets });
+        }
+
+        const $targetSavingThrow = target.$savingThrow;
+        const $cardSavingThrow = this.$calc(card.savingThrow, { wizard, card, target });
+        const savingThrow = await $targetSavingThrow + await $cardSavingThrow;
+        if (!target.inactive && card.canSave && this.roll(1, 20) <= savingThrow) {
+            multiplier *= card.canSave === true ? 0 : card.canSave;
+            this.event(Event.SAVE, { wizard, targets: [target], card });
+        }
+
+        return { target, multiplier };
+    }
+
+    async $activateCard({ wizard, card, targets, multiplier = 1 }) {
         this.event(Event.ACTIVATE, { wizard, card, targets });
-        const sacrifice = await this.$calc(card.sacrifice, { wizard, card, targets });
-        if (sacrifice) {
+
+        let sacrifice = 0;
+        if (card.sacrifice) {
+            sacrifice = await this.$calc(card.sacrifice, { wizard, card, targets });
             this.stat(wizard, 'hitPoints', -sacrifice);
         }
 
         await $.all(targets.map(async target => {
-            const [reactCard, reactTargets] = await this.$askCardWithTarget({
-                wizard: target,
-                action: 'react',
-                cards: target.hand.filter(c =>
-                    (card.canCancel && c.cancel) ||
-                    (card.canRedirect && c.redirect) ||
-                    (card.canResist && c.react))
-            });
-
-            cancel:
-            if (card.canCancel && reactCard?.cancel) {
-                const cancelCards = [reactCard];
-                for (let i = 1; i < card.canCancel; i++) {
-                    const cancelCard = await this.$askCard({
-                        wizard: target,
-                        cards: target.hand.filter(c => !cancelCards.includes(c) && c.cancel)
-                    });
-                    if (!cancelCard) break cancel;
-                    cancelCards.push(cancelCard);
-                }
-                this.event(Event.CANCEL, { wizard, targets: [target], card, cards: cancelCards });
-                for (const cancelCard of cancelCards)
-                    await this.$discard({ wizard: target, card: cancelCard });
-                return;
-            }
-
-            if (card.canRedirect && reactCard?.redirect) {
-                await this.$discard({ wizard: target, card: reactCard });
-                target = wizard;
-            }
-
-            if (card.canResist && reactCard?.react) {
-                await this.$playCard({ wizard: target, card: reactCard, targets: reactTargets });
-            }
-
-            if (card.draw) {
-                const draw = await this.$calc(card.draw, { wizard, card, target, sacrifice });
-                await this.$draw({ wizard: target, amount: draw });
-            }
-
-            const $targetSavingThrow = target.$savingThrow;
-            const $cardSavingThrow = this.$calc(card.savingThrow, { wizard, card, target, sacrifice });
-            const savingThrow = await $targetSavingThrow + await $cardSavingThrow;
-            let save = 1;
-            if (!target.inactive && card.canSave && this.roll(1, 20) <= savingThrow) {
-                save = card.canSave === true ? 0 : card.canSave;
-                this.event(Event.SAVE, { wizard, targets: [target], card, save });
-            }
+            const react = await this.$react({ wizard, card, target, multiplier });
+            if (react.cancelled) return;
+            target = react.target;
+            multiplier = react.multiplier;
 
             if (card.damage) {
                 const damageCalc = await this.$calc(card.damage, { wizard, card, target, sacrifice });
                 const absorb =
-                    (await $.all(target.equip
+                    (await $.all(target.equip.concat(target.effects)
                         .filter(c => c.absorb)
                         .map(c => this.$calc(c.absorb, { wizard: target, card: c }))))
                     .sum();
-                const damage = Math.max(Math.ceil(damageCalc * save) - absorb, 0);
+                const damage = Math.max(Math.ceil(damageCalc * multiplier) - absorb, 0);
                 this.stat(target, 'hitPoints', -damage);
                 if (card.lifesteal) {
                     this.stat(wizard, 'hitPoints', damage);
@@ -287,7 +286,7 @@ class Game {
             if (card.heal) {
                 const heal =
                     (await this.$calc(card.heal, { wizard, card, target, sacrifice })) *
-                    save;
+                    multiplier;
                 this.stat(target, 'hitPoints', heal);
             }
 
@@ -295,6 +294,17 @@ class Game {
                 await this.$chooseAndPlayCard({ wizard: target });
             }
         }));
+
+        if (card.combo) {
+            const { count, multiplier, type } = card.combo;
+            for (let i = 0; i < count * multiplier; i++) {
+                const card = await this.$askCard({
+                    wizard,
+                    cards: wizard.hand.filter(c => !type || c.type === type)
+                });
+                await this.$playCard({ wizard, card, targets: target, multiplier });
+            }
+        }
     }
 
     async $draw({ wizard, amount }) {
@@ -320,49 +330,9 @@ class Game {
         this.event(Event.EFFECT, { wizard, card, targets });
 
         await $.all(targets.map(async target => {
-            const [reactCard, reactTargets] = await this.$askCardWithTarget({
-                wizard: target,
-                action: 'react',
-                cards: target.hand.filter(c =>
-                    (card.canCancel && c.cancel) ||
-                    (card.canRedirect && c.redirect) ||
-                    (card.canResist && c.react))
-            });
-
-            cancel:
-            if (card.canCancel && reactCard?.cancel) {
-                const cancelCards = [reactCard];
-                for (let i = 1; i < card.canCancel; i++) {
-                    const cancelCard = await this.$askCard({
-                        wizard: target,
-                        cards: target.hand.filter(c => !cancelCards.includes(c) && c.cancel)
-                    });
-                    if (!cancelCard) break cancel;
-                    cancelCards.push(cancelCard);
-                }
-                this.event(Event.CANCEL, { wizard, targets: [target], card, cards: cancelCards });
-                for (const cancelCard of cancelCards)
-                    await this.$discard({ wizard: target, card: cancelCard });
-                return;
-            }
-
-            if (card.canRedirect && reactCard?.redirect) {
-                await this.$discard({ wizard: target, card: reactCard });
-                target = wizard;
-            }
-
-            if (card.canResist && reactCard?.react) {
-                await this.$playCard({ wizard: target, card: reactCard, targets: reactTargets });
-            }
-
-            const $targetSavingThrow = target.$savingThrow;
-            const $cardSavingThrow = this.$calc(card.savingThrow, { wizard, card, target });
-            const savingThrow = await $targetSavingThrow + await $cardSavingThrow;
-            if (!target.inactive && card.canSave && this.roll(1, 20) <= savingThrow) {
-                this.event(Event.SAVE, { wizard, targets: [target], card });
-                return;
-            }
-
+            const { target: newTarget, cancelled, multiplier } = await this.$react({ wizard, card, target });
+            if (cancelled || !multiplier) return;
+            target = newTarget;
             target.effects.push(card);
         }));
     }
@@ -376,24 +346,17 @@ class Game {
         this.event(Event.STAT, { wizard, [stat]: newStat - currentStat });
     }
 
-    async $playCard({ wizard, card, targets }) {
-        switch (targets) {
-            case Zone.TALON:
+    async $playCard({ wizard, card, targets, multiplier = 1 }) {
+        switch (card?.play) {
+            case Play.ACTIVATE:
+                await this.$activateCard({ wizard, card, targets, multiplier });
                 await this.$discard({ wizard, card });
                 break;
-            default:
-                switch (card && card.play) {
-                    case Play.ACTIVATE:
-                        await this.$activateCard({ wizard, card, targets });
-                        await this.$discard({ wizard, card });
-                        break;
-                    case Play.EQUIP:
-                        await this.$equip({ wizard, card, targets });
-                        break;
-                    case Play.EFFECT:
-                        await this.$effect({ wizard, card, targets });
-                        break;
-                }
+            case Play.EQUIP:
+                await this.$equip({ wizard, card, targets });
+                break;
+            case Play.EFFECT:
+                await this.$effect({ wizard, card, targets });
                 break;
         }
     }
@@ -407,6 +370,7 @@ class Game {
             for (const phase of Game.turnPhases) {
                 await this[phase]({ wizard });
                 await this.$checkDeaths();
+                if (!wizard.isAlive) break;
             }
 
             // TODO this condition is shyte
@@ -438,14 +402,15 @@ class Game {
             allowDiscard: true,
             obligatory: true
         });
-        if (card) {
+        if (targets === Zone.TALON) {
+            await this.$discard({ wizard, card });
+        } else {
             await this.$playCard({ wizard, card, targets });
         }
     }
 
     async $discardExpiredEffects({ wizard }) {
         for (const card of wizard.effects.filter(c => c.counter <= 0)) {
-            wizard.effects.remove(card);
             await this.$discard({ wizard, card });
         }
     }

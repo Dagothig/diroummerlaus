@@ -120,6 +120,10 @@ test('Array#$find', async t => {
     await t.throwsAsync(() => $foundError);
 });
 
+test('Array#toObject', t => {
+    t.like([['a', 1], ['b', 2]].toObject(), { a: 1, b: 2 })
+});
+
 test('Math#clip', t => {
     t.is(Math.clip(1, 3, 5), 3);
     t.is(Math.clip(4, 3, 5), 4);

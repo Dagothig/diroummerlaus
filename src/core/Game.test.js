@@ -300,7 +300,36 @@ test('Calculations with rolls', async t => {
     t.like(stat, { hitPoints: -11 });
 });
 
-test.todo('Calculations with choice');
+test('Calculations with choice', async t => {
+    const [game, queue] = getGame({
+        cards: [
+            { id: 'choose', target: Targets.OTHER, play: Play.ACTIVATE, damage: [Calc.CHOOSE, 100] }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'choose', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 50);
+
+    const [[, stat]] = await queue.$dequeue(1);
+    t.like(stat, { hitPoints: -50 });
+});
+
+test('Calculations based on number of players alive', async t => {
+    const [game, queue] = getGame({
+        cards: [
+            { id: 'alive', target: Targets.OTHER, play: Play.ACTIVATE, damage: Calc.ALIVE }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'alive', 'P2');
+
+    const [, [, stat]] = await queue.$dequeue(2);
+    t.like(stat, { hitPoints: -2 });
+});
 
 test('Heal', async t => {
     const [game, queue] = getGame({
@@ -457,6 +486,10 @@ test('Cancels', async t => {
     t.like(damagePayload, { wizard: 'P2', hitPoints: -5 });
     t.is(discard, Event.DISCARD);
 });
+
+test.todo('Anybody can cancel a spell');
+
+test.todo('Cancelling an effect may require multiple cancels');
 
 test('Redirects', async t => {
     const [game, queue] = getGame({
@@ -657,6 +690,8 @@ test('Haste', async t => {
     t.pass();
 });
 
+test.todo('Combo');
+
 test('Inactive', async t => {
     const [game, queue] = getGame({
         config: { handSize: 1 },
@@ -700,4 +735,14 @@ test.todo('Counter');
 
 test.todo('Card types');
 
-test.todo('Effect actions');
+test.todo('Remove');
+
+test.todo('Steal');
+
+test.todo('Multi');
+
+test.todo('Desintegrate');
+
+test.todo('Reshuffle');
+
+test.todo('Multiplier');
