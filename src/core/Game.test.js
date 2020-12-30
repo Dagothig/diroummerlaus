@@ -2,7 +2,7 @@ const test = require('ava');
 const {
     Game,
     cards,
-    definitions: { Card, Event, Calc, Targets, Play, Zone }
+    definitions: { Card, Event, Calc, Targets, Play, Zone, Item }
 } = require('.');
 const AsyncQueue = require('./AsyncQueue');
 
@@ -88,8 +88,10 @@ test('Invalid action', async t => {
     await queue.$find(([type]) => type === Event.QUESTION);
     game.send('P1', 'b', Zone.TALON);
 
+    // P1 *has* to play a card, so this should be ignored.
+    game.send('P1');
+
     // It isn't P2's turn, so this should be ignored.
-    await queue.$find(([type]) => type === Event.QUESTION);
     game.send('P2', 'b', Zone.TALON);
 
     t.like(game.wizards.find(w => w.player === 'P1').hand[0], { id: 'a' });
@@ -219,10 +221,52 @@ test('Death', async t => {
     t.like(endPayload, { winners: ['P1'] });
 });
 
+test('Calculations cases', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'unknown', type: Card.AD, damage: Symbol("WO") },
+            { id: 'caster', type: Card.AD, damage: [Calc.MUL, [Calc.HP, Calc.CASTER], 0.5] },
+            { id: 'dmgArray', type: Card.AD, damage: [6] },
+            { id: 'dmgEmptyMul', type: Card.AD, damage: [Calc.MUL] },
+        ]
+    })
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmgEmptyMul', 'P2');
+
+    const [, stat1p] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat1p, { wizard: 'P2', hitPoints: -1 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'dmgArray', 'P1');
+
+    const [, stat2p] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat2p, { wizard: 'P1', hitPoints: -6});
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'caster', 'P2');
+
+    const [, stat3p] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat3p, { wizard: 'P2', hitPoints: -22 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'unknown', 'P1');
+
+    const [, stat4p] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat4p, { wizard: 'P1', hitPoints: 0 });
+});
+
 test('Calculations based on power-level', async t => {
     const [game, queue] = getGame({
         config: { handSize: 1 },
         cards: [
+            {
+                id: 'dmg',
+                target: Targets.OTHER,
+                play: Play.ACTIVATE,
+                damage: [Calc.ADD, 1, [Calc.MUL, 5, [Calc.PL, Calc.TARGET]]]
+            },
             {
                 id: 'dmg',
                 target: Targets.OTHER,
@@ -245,7 +289,13 @@ test('Calculations based on power-level', async t => {
     game.send('P2', 'dmg', 'P1');
 
     const [, stat] = await queue.$find(([type]) => type === Event.STAT);
-    t.like(stat, { hitPoints: -11 });
+    t.like(stat, { wizard: 'P1', hitPoints: -11 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg', 'P2');
+
+    const [, stat2] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat2, { wizard: 'P2', hitPoints: -11 });
 });
 
 test('Calculations based on hp', async t => {
@@ -415,14 +465,33 @@ test('Resists', async t => {
     t.like(dmgPayload, { wizard: 'P2', hitPoints: 0 });
 });
 
+test('Reacting is optional', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'resist', react: true },
+            { id: 'dmg', type: Card.AD, damage: 5, canResist: true }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2');
+
+    const [[, statp]] = await queue.$dequeue(1);
+    t.like(statp, { wizard: 'P2', hitPoints: -5 });
+});
+
 test('Cancels', async t => {
     const [game, queue] = getGame({
         config: { handSize: 3 },
         cards: [
-            { id: 'dmg3', damage: 5, canCancel: 2, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'dmg3', damage: 5, canCancel: 2, type: Card.AD },
             { id: 'cancel4', cancel: true },
             { id: 'cancel3', cancel: true },
-            { id: 'dmg2', damage: 5, canCancel: 2, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'dmg2', damage: 5, canCancel: 2, type: Card.AD },
             { id: 'cancel2', cancel: true },
             { id: 'cancel1', cancel: true },
             { id: 'dmg1', damage: 5, canCancel: true, target: Targets.OTHER, play: Play.ACTIVATE },
@@ -690,7 +759,46 @@ test('Haste', async t => {
     t.pass();
 });
 
-test.todo('Combo');
+test('Combo', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 2 },
+        players: ['P1', 'P2', 'P3'],
+        cards: [
+            { id: 'dmg', type: Card.AD, damage: 1 },
+            {
+                id: 'othercombo',
+                play: Play.ACTIVATE,
+                target: Targets.OTHER,
+                combo: { count: 1 }
+            },
+            { id: 'dmg', type: Card.AD, damage: 1 },
+            {
+                id: 'combo',
+                play: Play.ACTIVATE,
+                target: Targets.OTHER,
+                combo: { count: 1, type: Card.AD, multiplier: 2 }
+            }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'combo', 'P2');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'dmg');
+
+    const [, statp] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(statp, { wizard: 'P2', hitPoints: -2 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'othercombo', 'P1');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'dmg');
+
+    const [, stat2p] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(stat2p, { wizard: 'P1', hitPoints: -1 });
+});
 
 test('Inactive', async t => {
     const [game, queue] = getGame({
@@ -729,13 +837,124 @@ test('Inactive', async t => {
 
 test.todo('Resurrect');
 
-test.todo('Absorb');
+test('Absorb', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'dmg', type: Card.AD, damage: 10 },
+            { id: 'absorb', type: Card.O, absorb: 5 },
+        ]
+    });
 
-test.todo('Counter');
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'absorb', 'P1');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'dmg', 'P1');
+
+    const [, statp] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(statp, { wizard: 'P1', hitPoints: -5 });
+});
+
+test('Counter', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'deadweight' },
+            { id: 'deadweight' },
+            { id: 'counter', play: Play.EFFECT, target: Targets.SELF, counter: 1 },
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'counter', 'P1');
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'deadweight', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'deadweight', Zone.TALON);
+
+    const [, [effectDiscard, effectDiscardP]] = await queue.$dequeue(2);
+
+    t.is(effectDiscard, Event.DISCARD);
+    t.like(effectDiscardP, { wizard: 'P1', card: 'counter' });
+});
 
 test.todo('Card types');
 
-test.todo('Remove');
+const deadweight = { id: 'deadweight' };
+const handObject = { id: 'handObject', type: Card.O };
+const handEffect = { id: 'handEffect', play: Play.EFFECT, target: Targets.SELF };
+const handSpell = { id: 'handSpell' };
+const effect = { id: 'effect', play: Play.EFFECT, target: Targets.SELF };
+const ring1 = { id: 'ring1', type: Card.O, item: Item.RING };
+const ring2 = { id: 'ring2', type: Card.O, item: Item.RING };
+const robe = { id: 'robe', type: Card.O, item: Item.ROBE };
+for (const [card, answer, expectedDiscard] of [
+    [
+        { id: 'depouillement', type: Card.CO, remove: Item.EQUIPPED },
+        [],
+        [ring1, ring2, robe]
+    ],
+    [
+        { id: 'dissipationAnneau', type: Card.CO, remove: [Item.CHOOSE, [Item.RING, Item.EQUIPPED]] },
+        ['P1', 'ring1'],
+        [ring1]
+    ],
+    [
+        { id: 'all', type: Card.CO, remove: Item.ALL },
+        [],
+        [handObject, handEffect, handSpell, ring1, ring2, robe, effect]
+    ],
+    [
+        { id: 'intervention', type: Card.CO, remove: [Item.EXCEPT, Item.ALL, Item.CHOOSE] },
+        ['P1', 'ring1'],
+        [handObject, handEffect, handSpell, ring2, robe, effect]
+    ],
+    [
+        { id: 'rings and robes', type: Card.CO, remove: [Item.ALL, Item.RING, Item.ROBE] },
+        [],
+        [ring1, ring2, robe]
+    ],
+    [{ id: 'unknown', type: Card.CO, remove: 12 }, [], []],
+    [{ id: 'unknown', type: Card.CO, remove: Symbol('unknown') }, [], []]
+]) {
+    const removeStr = String.expr(card.remove);
+    const discardsStr = expectedDiscard.map(c => c.id).join(', ');
+    test(`Remove ${ removeStr } discards ${ discardsStr }`, async t => {
+        const [game, queue] = getGame({
+            config: { handSize: 7 },
+            cards: [
+                handObject, handEffect, handSpell, effect, ring1, ring2, robe,
+                deadweight, deadweight, deadweight, deadweight, deadweight, deadweight, card,
+            ]
+        });
+
+        for (const item of [effect, ring1, ring2, robe]) {
+            await queue.$find(([type]) => type === Event.QUESTION);
+            game.send('P1', 'deadweight', Zone.TALON);
+
+            await queue.$find(([type]) => type === Event.QUESTION);
+            game.send('P2', item.id, 'P2');
+        }
+
+        await queue.$find(([type]) => type === Event.QUESTION);
+        game.send('P1', card.id, 'P2');
+
+        if (answer.length) {
+            await queue.$find(([type]) => type === Event.QUESTION);
+            game.send(...answer);
+        }
+
+        for (const discardedItem of expectedDiscard) {
+            const [, payload] = await queue.$find(([type]) => type === Event.DISCARD);
+            t.like(payload, { wizard: 'P2', card: discardedItem.id });
+        }
+
+        t.pass();
+    });
+}
 
 test.todo('Steal');
 
@@ -746,3 +965,5 @@ test.todo('Desintegrate');
 test.todo('Reshuffle');
 
 test.todo('Multiplier');
+
+test.todo('Equip caps');

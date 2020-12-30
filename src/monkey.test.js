@@ -120,6 +120,16 @@ test('Array#$find', async t => {
     await t.throwsAsync(() => $foundError);
 });
 
+test('Array#$sum', async t => {
+    let resolveA, resolveB;
+    const promiseA = new Promise(res => resolveA = res);
+    const promiseB = new Promise(res => resolveB = res);
+    const $sum = [promiseA, promiseB].$sum();
+    resolveA(1);
+    resolveB(2);
+    t.is(await $sum, 3);
+});
+
 test('Array#toObject', t => {
     t.like([['a', 1], ['b', 2]].toObject(), { a: 1, b: 2 })
 });

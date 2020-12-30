@@ -292,7 +292,6 @@ module.exports = [
         canResist: true,
         canCancel: true,
         canRedirect: true,
-        target: OTHER,
         remove: EQUIPPED
     },
     {
@@ -302,7 +301,6 @@ module.exports = [
         canResist: true,
         canCancel: true,
         canRedirect: true,
-        target: OTHER,
         remove: [ZONE_CHOOSE, RING]
     },
     {
@@ -312,7 +310,6 @@ module.exports = [
         canResist: true,
         canCancel: true,
         canRedirect: true,
-        target: OTHER,
         remove: [ZONE_CHOOSE, RING]
     },
     {
@@ -322,7 +319,6 @@ module.exports = [
         canResist: false,
         canCancel: true,
         canRedirect: true,
-        target: OTHER,
         steal: [ZONE_CHOOSE, EQUIPPED]
     },
     {
@@ -332,7 +328,6 @@ module.exports = [
         canResist: false,
         canCancel: true,
         canRedirect: true,
-        target: OTHER,
         steal: [CHOOSE, EQUIPPED]
     },
     { id: 'Annulation1', ...annulation },

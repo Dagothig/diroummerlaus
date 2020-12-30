@@ -89,6 +89,10 @@ monkey(Array.prototype, function $find(fn) {
     ]);
 });
 
+monkey(Array.prototype, async function $sum(fn = Function.id) {
+    return (await $.all(this.map(fn))).sum();
+});
+
 monkey(Array.prototype, function toObject() {
     return Object.fromEntries(this);
 });
@@ -131,4 +135,10 @@ monkey($, function controller() {
 
 monkey(String.prototype, function pascal() {
     return this[0].toUpperCase() + this.slice(1);
-})
+});
+
+monkey(String, function expr(arg) {
+    return Array.isArray(arg) ?
+        '[' + arg.map(String.expr).join(', ') + ']' :
+        arg.description || arg.toString();
+});

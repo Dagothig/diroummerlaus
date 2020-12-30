@@ -20,8 +20,8 @@ class Game {
         [Card.E]: { play: Play.ACTIVATE },
         [Card.S]: { play: Play.ACTIVATE },
         [Card.ST]: { play: Play.ACTIVATE },
-        [Card.O]: { targets: Targets.SELF, play: Play.EQUIP },
-        [Card.CO]: { play: Play.ACTIVATE },
+        [Card.O]: { target: Targets.SELF, play: Play.EQUIP },
+        [Card.CO]: { target: Targets.OTHER, play: Play.ACTIVATE },
         [Card.CA]: { react: Play.EFFECT }
     }
 
@@ -42,10 +42,9 @@ class Game {
         this.wizards = this.rng.shuffle(players.map((player, i) => ({
             turn: i,
             async $stat(key) {
-                return game.config[key] +
-                    (await $.all(this.effects.concat(this.equip)
-                        .map(c => game.$calc(c[key], { wizard: this }))))
-                    .sum();
+                return (game.config[key] || 0) +
+                    await this.effects.concat(this.equip)
+                        .$sum(c => game.$calc(c[key], { wizard: this }))
             },
             flag(key) {
                 return (
@@ -61,6 +60,7 @@ class Game {
             get maxHitPoints() { return game.config.hitPoints },
             get $powerLevel() { return this.$stat('powerLevel'); },
             get $savingThrow() { return this.$stat('savingThrow'); },
+            get $absorb() { return this.$stat('absorb'); },
             get untargettable() { return this.flag('untargettable') },
             get inactive() { return this.flag('inactive'); }
         })));
@@ -104,6 +104,7 @@ class Game {
         if (choice) {
             if (question.choices) {
                 const [answer, subChoices] = question.choices.find(([c]) => choice === c) || [];
+                if (!answer && question.obligatory) return;
                 const subAnswer = subChoices?.find(secondary => subChoice === secondary);
                 return (!(subChoices?.length) || subAnswer) && question.resolve([answer, subAnswer]);
             }
@@ -179,12 +180,9 @@ class Game {
                     case Calc.ADD: return args.sum();
                     case Calc.ROLL: return this.roll.apply(this, args);
                     case Calc.HP: return args.sum(n => n.hitPoints);
-                    case Calc.PL: return (await $.all(args.map(n => n.$powerLevel))).sum();
-                    case Calc.CHOOSE:
-                        // TODO - Support choosing other things than numbers.
-                        return (
-                            (await $.all(args.map(n => this.$askNumber({ wizard, number: n }))))
-                            .sum());
+                    case Calc.PL: return args.$sum(n => n.$powerLevel);
+                    case Calc.CHOOSE: return args.$sum(n =>
+                        this.$askNumber({ wizard, number: n, obligatory: true }));
                     default: return await this._$calc(value[0], env);
                 }
             case 'symbol':
@@ -205,6 +203,38 @@ class Game {
 
     async $calc(value, env) {
         return Math.ceil(await this._$calc(value, env));
+    }
+
+    async $items(value, env) {
+        const { wizard, target } = env;
+        switch (typeof value) {
+            case 'object':
+                const args = await $.all(value.slice(1).map(n => this.$items(n, env)));
+                switch (args.length && value[0]) {
+                    case Item.CHOOSE:
+                        return [await this.$askCard({ wizard, cards: args.flat(), obligatory: true })];
+                    case Item.ALL:
+                        return args.flat();
+                    case Item.EXCEPT:
+                        return args[0].except(...args.slice(1).flat());
+                    default: return args.flat().filter(c => c.item === value[0]);
+                }
+            case 'symbol':
+                switch (value) {
+                    case Item.CHOOSE:
+                        return this.$items([Item.CHOOSE, Item.ALL], env);
+                    case Item.ALL:
+                        return target.hand.concat(target.equip).concat(target.effects);
+                    case Item.EQUIPPED:
+                        return target.equip.slice();
+                    case Item.RING:
+                        return target.equip.filter(c => c.item === Item.RING);
+                    case Item.ROBE:
+                        return target.equip.filter(c => c.item === Item.ROBE);
+                    default: [];
+                }
+            default: return [];
+        }
     }
 
     async $react({ wizard, card, target, multiplier = 1 }) {
@@ -254,7 +284,7 @@ class Game {
         return { target, multiplier };
     }
 
-    async $activateCard({ wizard, card, targets, multiplier = 1 }) {
+    async $activateCard({ wizard, card, targets, multiplier }) {
         this.event(Event.ACTIVATE, { wizard, card, targets });
 
         let sacrifice = 0;
@@ -271,40 +301,39 @@ class Game {
 
             if (card.damage) {
                 const damageCalc = await this.$calc(card.damage, { wizard, card, target, sacrifice });
-                const absorb =
-                    (await $.all(target.equip.concat(target.effects)
-                        .filter(c => c.absorb)
-                        .map(c => this.$calc(c.absorb, { wizard: target, card: c }))))
-                    .sum();
+                const absorb = await target.$absorb;
                 const damage = Math.max(Math.ceil(damageCalc * multiplier) - absorb, 0);
                 this.stat(target, 'hitPoints', -damage);
-                if (card.lifesteal) {
-                    this.stat(wizard, 'hitPoints', damage);
+                card.lifesteal && this.stat(wizard, 'hitPoints', damage);
+            }
+
+            card.heal && this.stat(
+                target,
+                'hitPoints',
+                (await this.$calc(card.heal, { wizard, card, target, sacrifice })) * multiplier);
+
+            for (let i = 0; i < card.haste; i++)
+                await this.$chooseAndPlayCard({ wizard: target });
+
+            for (let i = 0; i < card.combo?.count; i++) {
+                await this.$playCard({
+                    wizard,
+                    card: await this.$askCard({
+                        wizard,
+                        cards: wizard.hand.filter(c => !card.combo.type || c.type === card.combo.type),
+                        obligatory: true
+                    }),
+                    targets: [target],
+                    multiplier: card.combo.multiplier || 1
+                });
+            }
+
+            if (card.remove) {
+                for (const c of await this.$items(card.remove, { wizard, card, target, sacrifice })) {
+                    this.$discard({ wizard: target, card: c });
                 }
             }
-
-            if (card.heal) {
-                const heal =
-                    (await this.$calc(card.heal, { wizard, card, target, sacrifice })) *
-                    multiplier;
-                this.stat(target, 'hitPoints', heal);
-            }
-
-            for (let i = 0; i < card.haste; i++) {
-                await this.$chooseAndPlayCard({ wizard: target });
-            }
         }));
-
-        if (card.combo) {
-            const { count, multiplier, type } = card.combo;
-            for (let i = 0; i < count * multiplier; i++) {
-                const card = await this.$askCard({
-                    wizard,
-                    cards: wizard.hand.filter(c => !type || c.type === type)
-                });
-                await this.$playCard({ wizard, card, targets: target, multiplier });
-            }
-        }
     }
 
     async $draw({ wizard, amount }) {
@@ -382,17 +411,11 @@ class Game {
     }
 
     async $counterDecrease({ wizard }) {
-        wizard.effects.forEach(effect => effect.counter--);
+        wizard.effects.forEach(effect => 'counter' in effect && effect.counter--);
     }
 
     async $activateEffects({ wizard }) {
-        const [card, targets] = await this.$askCardWithTarget({
-            wizard,
-            cards: wizard.effects.filter(e => e.activate)
-        });
-        if (card) {
-            await this.$activateCard({ wizard, card, targets });
-        }
+        // TODO - The current data structure really doesn't support this well.
     }
 
     async $chooseAndPlayCard({ wizard }) {
