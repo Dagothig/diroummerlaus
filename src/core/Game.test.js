@@ -1196,7 +1196,7 @@ test('Equip caps', async t => {
     await queue.$find(([type]) => type === Event.QUESTION);
     game.send('P2', 'robe2', 'P2');
 
-    const [[, discardRobe]] = await queue.$dequeue(1);
+    const [, [, discardRobe]] = await queue.$dequeue(2);
     t.like(discardRobe, { wizard: 'P2', card: 'robe1' });
 
     await queue.$find(([type]) => type === Event.QUESTION);

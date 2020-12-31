@@ -132,6 +132,7 @@ class Game {
         const target = this.wizards.find(w => w.player === targetId);
         return target ? [target] : targetId;
     }
+
     targetIds(wizard, card) {
         switch (card?.target) {
             case Targets.SELF:
@@ -397,6 +398,8 @@ class Game {
 
     async $equip({ wizard, card, targets }) {
         wizard.hand.remove(card);
+        this.event(Event.EQUIP, { wizard, card, targets });
+
         await $.all(targets.map(async target => {
             if (card.item && card.item in this.config.itemLimits) {
                 const sameType = target.equip.filter(c => c.item === card.item);
@@ -407,7 +410,6 @@ class Game {
             }
             target.equip.push(card);
         }));
-        this.event(Event.EQUIP, { wizard, card, targets });
     }
 
     async $effect({ wizard, card, targets }) {
