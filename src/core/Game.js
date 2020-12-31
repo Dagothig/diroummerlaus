@@ -114,6 +114,7 @@ class Game {
     }
 
     async $askCard({ wizard, cards, ...question }) {
+        if (cards.length === 1 && question.obligatory) return cards[0]
         const [cardId] = await this.$ask({ wizard, choices: cards.map(c => [c.id, []]), ...question });
         return cardId && cards.find(c => c.id === cardId);
     }
@@ -301,6 +302,12 @@ class Game {
                 const damage = Math.max(Math.ceil(damageCalc * multiplier) - absorb, 0);
                 this.stat(target, 'hitPoints', -damage);
                 card.lifesteal && this.stat(wizard, 'hitPoints', damage);
+                card.acid && damage && this.roll(1, 6) === 1 && this.$discard({
+                    wizard: target,
+                    cards: await this.$items(
+                        [Item.CHOOSE, Item.EQUIPPED],
+                        { wizard, card, target, sacrifice })
+                });
             }
 
             card.heal && this.stat(
@@ -335,6 +342,13 @@ class Game {
             });
 
             card.desintegrate && this.$death({ wizard: target });
+
+            if (card.transferBodies) {
+                const wizardPlayer = wizard.player;
+                const targetPlayer = target.player;
+                wizard.player = targetPlayer;
+                target.player = wizardPlayer;
+            }
         }));
 
         if (card.reshuffle) {
@@ -351,7 +365,7 @@ class Game {
     }
 
     async $discard({ wizard, card, cards = [] }) {
-        card && cards.push(card);
+        card && (cards = [...cards, card]);
         cards.forEach(c => {
             wizard.hand.remove(c) || wizard.effects.remove(c) || wizard.equip.remove(c);
             this.talon.push(c);
@@ -360,7 +374,7 @@ class Game {
     }
 
     async $steal({ wizard, target, card, cards = [] }) {
-        card && cards.push(card);
+        card && (cards = [...cards, card]);
         cards.forEach(c => {
             target.hand.remove(c) || target.effects.remove(c) || target.equip.remove(c);
             wizard.hand.push(c);
@@ -370,7 +384,16 @@ class Game {
 
     async $equip({ wizard, card, targets }) {
         wizard.hand.remove(card);
-        targets.forEach(target => target.equip.push(card));
+        await $.all(targets.map(async target => {
+            if (card.item && card.item in this.config.itemLimits) {
+                const sameType = target.equip.filter(c => c.item === card.item);
+                sameType.length >= this.config.itemLimits[card.item] && this.$discard({
+                    wizard: target,
+                    card: await this.$askCard({ wizard: target, cards: sameType, obligatory: true }),
+                });
+            }
+            target.equip.push(card);
+        }));
         this.event(Event.EQUIP, { wizard, card, targets });
     }
 
@@ -465,6 +488,13 @@ class Game {
 
     async $checkDeaths() {
         for (const wizard of this.wizards.filter(w => w.isAlive && w.hitPoints <= 0)) {
+            const resurrect = wizard.equip.concat(wizard.effects).find(c => c.resurrect);
+            if (resurrect) {
+                this.stat(wizard, 'hitPoints', wizard.maxHitPoints - wizard.hitPoints);
+                await this.$discard({ wizard, cards: wizard.hand, card: resurrect });
+                await this.$drawMissingCards({ wizard });
+                continue;
+            }
             await this.$death({ wizard });
         }
     }
