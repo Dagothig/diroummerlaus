@@ -120,14 +120,18 @@ class Game {
     }
 
     targets(wizard, card, targetId) {
+        if (targetId === Zone.UNSPECIFIED)
+            switch (card?.target) {
+                case Targets.OTHERS:
+                    return this.wizards.filter(w => w.isAlive && w !== wizard && !w.untargettable);
+                case Targets.OTHER:
+                    return this.targetIds(wizard, card).slice(0, 1);
+                default:
+                    return this.targetIds(wizard, card);
+            }
         const target = this.wizards.find(w => w.player === targetId);
-        return target ?
-            [target] :
-            (card?.target === Targets.OTHERS && targetId === Zone.UNSPECIFIED ?
-                this.wizards.filter(w => w.isAlive && w !== wizard && !w.untargettable) :
-                targetId);
+        return target ? [target] : targetId;
     }
-
     targetIds(wizard, card) {
         switch (card?.target) {
             case Targets.SELF:
@@ -315,6 +319,7 @@ class Game {
                 'hitPoints',
                 (await this.$calc(card.heal, { wizard, card, target, sacrifice })) * multiplier);
 
+            // TODO Clearly haste and combo should be the same keyword (possibly with multi)
             for (let i = 0; i < card.haste; i++)
                 await this.$chooseAndPlayCard({ wizard: target });
 
@@ -350,6 +355,14 @@ class Game {
                 target.player = wizardPlayer;
             }
         }));
+
+        for (const entry of card.multi || [])
+            await this.$activateCard({
+                wizard,
+                card: entry,
+                targets: entry.target ? this.targets(wizard, entry, Zone.UNSPECIFIED) : targets,
+                multiplier
+            });
 
         if (card.reshuffle) {
             const cards = this.talon.take(this.talon.length);

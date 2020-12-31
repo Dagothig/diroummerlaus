@@ -969,8 +969,6 @@ test('Counter', async t => {
     t.like(effectDiscardP, { wizard: 'P1', card: 'counter' });
 });
 
-test.todo('Card types');
-
 const deadweight = { id: 'deadweight' };
 const handObject = { id: 'handObject', type: Card.O };
 const handEffect = { id: 'handEffect', play: Play.EFFECT, target: Targets.SELF };
@@ -1053,17 +1051,86 @@ test('Steal', async t => {
         ]
     });
 
-    q1 = await queue.$find(([type]) => type === Event.QUESTION);
+    await queue.$find(([type]) => type === Event.QUESTION);
     game.send('P1', 'ring1', 'P1');
 
-    q2 = await queue.$find(([type]) => type === Event.QUESTION);
+    await queue.$find(([type]) => type === Event.QUESTION);
     game.send('P2', 'steal', 'P1');
 
     const [, stealPayload] = await queue.$find(([type]) => type === Event.STEAL);
     t.like(stealPayload, { wizard: 'P2', targets: ['P1'], card: 'ring1' });
 });
 
-test.todo('Multi');
+test('Multi', async t => {
+    const [game, queue] = getGame({
+        players: ['P1', 'P2', 'P3'],
+        config: { handSize: 3 },
+        cards: [
+            ...Array.gen(6, i => ({ id: `deadweight${ 6 - i }` })),
+            {
+                id: 'withSameTarget',
+                type: Card.AD,
+                multi: [
+                    { damage: 1 },
+                    { damage: 1 }
+                ]
+            },
+            {
+                id: 'withImplicitTargets',
+                play: Play.ACTIVATE,
+                target: Targets.SELF,
+                multi: [
+                    { damage: 1, target: Targets.LEFT },
+                    { damage: 1, target: Targets.RIGHT }
+                ]
+            },
+            {
+                id: 'withIndividualSaves',
+                type: Card.AD,
+                multi: [
+                    { damage: 1, canSave: true },
+                    { damage: 1, canSave: true, savingThrow: 20 }
+                ]
+            }
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'withSameTarget', 'P2');
+
+    const [, d1p] = await queue.$find(([type]) => type === Event.STAT);
+    const [, d2p] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(d1p, { wizard: 'P2', hitPoints: -1 });
+    t.like(d2p, { wizard: 'P2', hitPoints: -1 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'deadweight1', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P3', 'deadweight4', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'withImplicitTargets', 'P1');
+
+    const [, d3p] = await queue.$find(([type]) => type === Event.STAT);
+    const [, d4p] = await queue.$find(([type]) => type === Event.STAT);
+    t.like(d3p, { wizard: 'P2', hitPoints: -1 });
+    t.like(d4p, { wizard: 'P3', hitPoints: -1 });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'deadweight2', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P3', 'deadweight5', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'withIndividualSaves', 'P2');
+
+    const [, d5p] = await queue.$find(([type]) => type === Event.STAT);
+    const [, sp] = await queue.$find(([type]) => type === Event.SAVE);
+    t.like(d5p, { wizard: 'P2', hitPoints: -1 });
+    t.like(sp, { wizard: 'P1', targets: ['P2'] });
+});
 
 test('Desintegrate', async t => {
     const [game, queue] = getGame({ cards: [
