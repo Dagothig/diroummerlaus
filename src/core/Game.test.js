@@ -207,12 +207,22 @@ test('Damage', async t => {
 });
 
 test('Death', async t => {
-    const [game, queue] = getGame({ cards: [
-        { id: 'dmg', damage: 50, target: Targets.OTHER, play: Play.ACTIVATE }
-    ] });
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'deadweight' },
+            { id: 'dmg', damage: 50, target: Targets.OTHER, play: Play.ACTIVATE }
+        ]
+    });
 
     await queue.$find(([type]) => type === Event.QUESTION);
     game.send('P1', 'dmg', 'P2');
+
+    // Skip the dmg card discard.
+    await queue.$find(([type]) => type === Event.DISCARD);
+
+    const [, discardPayload] = await queue.$find(([type]) => type === Event.DISCARD);
+    t.like(discardPayload, { wizard: 'P2', card: 'deadweight' });
 
     const [, deathPayload] = await queue.$find(([type]) => type === Event.DEATH);
     t.like(deathPayload, { wizard: 'P2' });
@@ -956,14 +966,73 @@ for (const [card, answer, expectedDiscard] of [
     });
 }
 
-test.todo('Steal');
+test('Steal', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'steal', type: Card.CO, steal: [Item.CHOOSE, Item.EQUIPPED] },
+            ring1,
+        ]
+    });
+
+    q1 = await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'ring1', 'P1');
+
+    q2 = await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'steal', 'P1');
+
+    q3 = await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'ring1');
+
+    const [[steal, stealPayload]] = await queue.$dequeue(1);
+
+    t.is(steal, Event.STEAL);
+    t.like(stealPayload, { wizard: 'P2', targets: ['P1'], card: 'ring1' });
+});
 
 test.todo('Multi');
 
-test.todo('Desintegrate');
+test('Desintegrate', async t => {
+    const [game, queue] = getGame({ cards: [
+        { id: 'kill', type: Card.AD, desintegrate: true }
+    ] });
 
-test.todo('Reshuffle');
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'kill', 'P2');
 
-test.todo('Multiplier');
+    const [, deathPayload] = await queue.$find(([type]) => type === Event.DEATH);
+    t.like(deathPayload, { wizard: 'P2' });
+});
+
+test('Reshuffle', async t => {
+    const [game, queue] = getGame({
+        config: { handSize: 1 },
+        cards: [
+            { id: 'reshuffle', play: Play.ACTIVATE, reshuffle: true, target: Targets.OTHERS },
+            ...Array.gen(2, i => ({ id: 'deadweight' + (2 - i) }))
+        ]
+    });
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'deadweight1', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'deadweight2', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'reshuffle', Zone.UNSPECIFIED);
+
+    const [, [reshuffle, reshufflePayload]] = await queue.$dequeue(2);
+
+    t.is(reshuffle, Event.RESHUFFLE);
+    t.like(reshufflePayload, { cards: ['deadweight1', 'deadweight2'] });
+
+    // At P2's turn there were no cards to draw so it's P1's turn again.
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P1', 'deadweight2', Zone.TALON);
+
+    await queue.$find(([type]) => type === Event.QUESTION);
+    game.send('P2', 'deadweight1', Zone.TALON);
+});
 
 test.todo('Equip caps');

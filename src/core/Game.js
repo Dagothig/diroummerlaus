@@ -259,8 +259,7 @@ class Game {
                 cancelCards.push(cancelCard);
             }
             this.event(Event.CANCEL, { wizard, targets: [target], card, cards: cancelCards });
-            for (const cancelCard of cancelCards)
-                await this.$discard({ wizard: target, card: cancelCard });
+            await this.$discard({ wizard: target, cards: cancelCards });
             return { cancelled: true };
         }
 
@@ -287,11 +286,8 @@ class Game {
     async $activateCard({ wizard, card, targets, multiplier }) {
         this.event(Event.ACTIVATE, { wizard, card, targets });
 
-        let sacrifice = 0;
-        if (card.sacrifice) {
-            sacrifice = await this.$calc(card.sacrifice, { wizard, card, targets });
-            this.stat(wizard, 'hitPoints', -sacrifice);
-        }
+        const sacrifice = await this.$calc(card.sacrifice, { wizard, card, targets });
+        sacrifice && this.stat(wizard, 'hitPoints', -sacrifice);
 
         await $.all(targets.map(async target => {
             const react = await this.$react({ wizard, card, target, multiplier });
@@ -315,7 +311,7 @@ class Game {
             for (let i = 0; i < card.haste; i++)
                 await this.$chooseAndPlayCard({ wizard: target });
 
-            for (let i = 0; i < card.combo?.count; i++) {
+            for (let i = 0; i < card.combo?.count; i++)
                 await this.$playCard({
                     wizard,
                     card: await this.$askCard({
@@ -326,14 +322,26 @@ class Game {
                     targets: [target],
                     multiplier: card.combo.multiplier || 1
                 });
-            }
 
-            if (card.remove) {
-                for (const c of await this.$items(card.remove, { wizard, card, target, sacrifice })) {
-                    this.$discard({ wizard: target, card: c });
-                }
-            }
+            card.remove && this.$discard({
+                wizard: target,
+                cards: await this.$items(card.remove, { wizard, card, target, sacrifice })
+            });
+
+            card.steal && this.$steal({
+                wizard,
+                target,
+                cards: await this.$items(card.steal, { wizard, card, target, sacrifice })
+            });
+
+            card.desintegrate && this.$death({ wizard: target });
         }));
+
+        if (card.reshuffle) {
+            const cards = this.talon.take(this.talon.length);
+            this.pile.push(...this.rng.shuffle(cards));
+            this.event(Event.RESHUFFLE, { wizard, cards });
+        }
     }
 
     async $draw({ wizard, amount }) {
@@ -342,10 +350,22 @@ class Game {
         this.event(Event.DRAW, { wizard, cards });
     }
 
-    async $discard({ wizard, card }) {
-        wizard.hand.remove(card) || wizard.effects.remove(card) || wizard.equip.remove(card);
-        this.talon.push(card);
-        this.event(Event.DISCARD, { wizard, card });
+    async $discard({ wizard, card, cards = [] }) {
+        card && cards.push(card);
+        cards.forEach(c => {
+            wizard.hand.remove(c) || wizard.effects.remove(c) || wizard.equip.remove(c);
+            this.talon.push(c);
+            this.event(Event.DISCARD, { wizard, card: c });
+        });
+    }
+
+    async $steal({ wizard, target, card, cards = [] }) {
+        card && cards.push(card);
+        cards.forEach(c => {
+            target.hand.remove(c) || target.effects.remove(c) || target.equip.remove(c);
+            wizard.hand.push(c);
+            this.event(Event.STEAL, { wizard, targets: [target], card: c });
+        })
     }
 
     async $equip({ wizard, card, targets }) {
@@ -445,9 +465,15 @@ class Game {
 
     async $checkDeaths() {
         for (const wizard of this.wizards.filter(w => w.isAlive && w.hitPoints <= 0)) {
-            wizard.isAlive = false;
-            this.event(Event.DEATH, { wizard });
+            await this.$death({ wizard });
         }
+    }
+
+    async $death({ wizard }) {
+        wizard.isAlive = false;
+        for (const card of await this.$items(Item.ALL, { target: wizard }))
+            this.$discard({ wizard, card });
+        this.event(Event.DEATH, { wizard });
     }
 };
 

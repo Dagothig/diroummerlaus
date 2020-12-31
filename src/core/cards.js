@@ -328,7 +328,7 @@ module.exports = [
         canResist: false,
         canCancel: true,
         canRedirect: true,
-        steal: [CHOOSE, EQUIPPED]
+        steal: [ZONE_CHOOSE, EQUIPPED]
     },
     { id: 'Annulation1', ...annulation },
     { id: 'Annulation2', ...annulation },
