@@ -201,22 +201,25 @@ test('Damage', async t => {
 
 test('Death', async t => {
     const [g, q] = getGame({
-        config: { handSize: 1 },
+        config: { handSize: 2 },
         cards: [
-            { id: 'deadweight' },
-            { id: 'dmg', damage: 50, type: Card.AD }
+            { id: 'deadweight4' },
+            { id: 'deadweight3' },
+            { id: 'deadweight2' },
+            { id: 'deadweight1' },
+            { id: 'dmg', damage: 50, type: Card.A },
         ]
     });
 
     await q.$type(Event.QUESTION);
-    g.send('P1', 'dmg', 'P2');
+    g.send('P1', 'dmg', 'P1');
 
     // Skip the dmg card discard.
     await q.$type(Event.DISCARD);
 
-    t.like(await q.$type(Event.DISCARD), { wizard: 'P2', card: 'deadweight' });
-    t.like(await q.$type(Event.DEATH), { wizard: 'P2' });
-    t.like(await q.$type(Event.END), { winners: ['P1'] });
+    t.like(await q.$type(Event.DISCARD), { wizard: 'P1', card: 'deadweight1' });
+    t.like(await q.$type(Event.DEATH), { wizard: 'P1' });
+    t.like(await q.$type(Event.END), { winners: ['P2'] });
 });
 
 test('Calculations cases', async t => {
@@ -912,7 +915,8 @@ test('Multi', async t => {
                 target: Targets.SELF,
                 multi: [
                     { damage: 1, target: Targets.LEFT },
-                    { damage: 1, target: Targets.RIGHT }
+                    { damage: 1, target: Targets.RIGHT },
+                    { damage: 1, target: Targets.OTHER }
                 ]
             },
             {
@@ -935,6 +939,7 @@ test('Multi', async t => {
     await q.$answer('P1', 'withImplicitTargets', 'P1');
     t.like(await q.$type(Event.STAT), { wizard: 'P2', hitPoints: -1 });
     t.like(await q.$type(Event.STAT), { wizard: 'P3', hitPoints: -1 });
+    t.like(await q.$type(Event.STAT), { wizard: 'P2', hitPoints: -1 });
 
     await q.$answer('P2', 'deadweight2', Zone.TALON);
     await q.$answer('P3', 'deadweight5', Zone.TALON);

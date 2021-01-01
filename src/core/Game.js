@@ -115,6 +115,7 @@ class Game {
     }
 
     async $askCard({ wizard, cards, ...question }) {
+        if (wizard.inactive) return;
         if (cards.length === 1 && question.obligatory) return cards[0]
         const [cardId] = await this.$ask({ wizard, choices: cards.map(c => [c.id, []]), ...question });
         return cardId && cards.find(c => c.id === cardId);
@@ -464,19 +465,20 @@ class Game {
 
     async $run() {
         await $.all(this.wizards.map(wizard => this.$drawMissingCards({ wizard })));
-        let turn = this.wizards.length - 1;
-        while (turn !== (turn = this.wizards.findIndexFrom(turn + 1, wizard => wizard.isAlive))) {
+
+        for (
+            let turn = this.wizards.findIndex(w => w.isAlive);
+            // TODO this condition is shyte
+            (this.wizards.find(w => w.isAlive && w.hand.length) || this.pile.length) &&
+                this.wizards.count(w => w.isAlive) > 1;
+            turn = this.wizards.findIndexFrom(turn + 1, w => w.isAlive)
+        ) {
             const wizard = this.wizards[turn];
             this.event(Event.TURN, { wizard });
             for (const phase of Game.turnPhases) {
                 await this[phase]({ wizard });
                 await this.$checkDeaths();
                 if (!wizard.isAlive) break;
-            }
-
-            // TODO this condition is shyte
-            if (this.wizards.every(w => !w.hand.length) && !this.pile.length) {
-                break;
             }
         }
         this.event(Event.END, { winners: this.wizards.filter(w => w.isAlive) });

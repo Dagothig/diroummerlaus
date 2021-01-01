@@ -67,6 +67,14 @@ monkey(Array.prototype, function prod(fn = Function.id) {
     return this.reduce((n, m) => n * fn(m), 1);
 });
 
+monkey(Array.prototype, function count(fn = Function.id) {
+    let count = 0;
+    for (const entry of this)
+        if (fn(entry))
+            count++;
+    return count;
+});
+
 monkey(Array, function gen(n, fn = Function.id){
     return new Array(n).fill().map((_, i) => fn(i));
 });
