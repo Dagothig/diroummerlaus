@@ -3,7 +3,7 @@ const {
     Game,
     definitions: { Card, Event, Calc, Targets, Play, Zone, Item }
 } = require('.');
-const AsyncQueue = require('./AsyncQueue');
+const GameQueue = require('./GameQueue');
 
 const baseArgs = {
     players: ['P1', 'P2'],
@@ -15,13 +15,8 @@ const baseArgs = {
 };
 
 function getGame(args) {
-    const q = new AsyncQueue();
     const g = new Game({ ...baseArgs, ...args });
-    q.$type = async x => (await q.$find(([type]) => type === x))[1];
-    q.$answer = async (...args) => (await q.$type(Event.QUESTION), g.send(...args));
-
-    g.onEvent((t, p) => q.enqueue([t, p]));
-
+    const q = new GameQueue(g);
     const $run = g.$run();
 
     return [g, q, $run];
@@ -79,10 +74,7 @@ test('Base turn', async t => {
 test('Invalid action', async t => {
     const [g, q] = getGame({
         config: { handSize: 1 },
-        cards: [
-            { id: 'b' },
-            { id: 'a' },
-        ]
+        cards: [{ id: 'b' }, { id: 'a' }]
     });
 
     // P1 doesn't have the 'b' card in hand, so this should be ignored.
@@ -101,7 +93,7 @@ test('Invalid action', async t => {
 
 test('Play card types', async t => {
     const cards = [
-        { id: 'play', play: Play.ACTIVATE, target: Targets.SELF },
+        { id: 'play', type: Card.A },
         { id: 'effect', play: Play.EFFECT, target: Targets.SELF },
         { id: 'equip', play: Play.EQUIP, target: Targets.SELF }
     ];
@@ -193,7 +185,7 @@ test('Target types', async t => {
 
 test('Damage', async t => {
     const [g, q] = getGame({ cards: [
-        { id: 'dmg', damage: 5, target: Targets.OTHER, play: Play.ACTIVATE }
+        { id: 'dmg', damage: 5, type: Card.AD }
     ] });
 
     await q.$type(Event.QUESTION);
@@ -212,7 +204,7 @@ test('Death', async t => {
         config: { handSize: 1 },
         cards: [
             { id: 'deadweight' },
-            { id: 'dmg', damage: 50, target: Targets.OTHER, play: Play.ACTIVATE }
+            { id: 'dmg', damage: 50, type: Card.AD }
         ]
     });
 
@@ -236,7 +228,7 @@ test('Calculations cases', async t => {
             { id: 'dmgArray', type: Card.AD, damage: [6] },
             { id: 'dmgEmptyMul', type: Card.AD, damage: [Calc.MUL] },
         ]
-    })
+    });
 
     await q.$answer('P1', 'dmgEmptyMul', 'P2');
     t.like(await q.$type(Event.STAT), { wizard: 'P2', hitPoints: -1 });
@@ -313,14 +305,7 @@ test('Calculations based on hp', async t => {
 test('Calculations with rolls', async t => {
     const [, q] = getGame({
         config: { handSize: 1 },
-        cards: [
-            {
-                id: 'dmg',
-                target: Targets.OTHER,
-                play: Play.ACTIVATE,
-                damage: [Calc.ROLL, 3, 6]
-            }
-        ]
+        cards: [{ id: 'dmg', type: Card.AD, damage: [Calc.ROLL, 3, 6] }]
     });
 
     await q.$answer('P1', 'dmg', 'P2');
@@ -329,9 +314,7 @@ test('Calculations with rolls', async t => {
 
 test('Calculations with choice', async t => {
     const [, q] = getGame({
-        cards: [
-            { id: 'choose', target: Targets.OTHER, play: Play.ACTIVATE, damage: [Calc.CHOOSE, 100] }
-        ]
+        cards: [{ id: 'choose', type: Card.AD, damage: [Calc.CHOOSE, 100] }]
     });
 
     await q.$answer('P1', 'choose', 'P2');
@@ -341,9 +324,7 @@ test('Calculations with choice', async t => {
 
 test('Calculations based on number of players alive', async t => {
     const [, q] = getGame({
-        cards: [
-            { id: 'alive', target: Targets.OTHER, play: Play.ACTIVATE, damage: Calc.ALIVE }
-        ]
+        cards: [{ id: 'alive', type: Card.AD, damage: Calc.ALIVE }]
     });
 
     await q.$answer('P1', 'alive', 'P2');
@@ -353,10 +334,7 @@ test('Calculations based on number of players alive', async t => {
 test('Heal', async t => {
     const [, q] = getGame({
         config: { handSize: 1 },
-        cards: [
-            { id: 'heal', heal: 5, target: Targets.OTHER, play: Play.ACTIVATE },
-            { id: 'damage', damage: 5, target: Targets.SELF, play: Play.ACTIVATE }
-        ]
+        cards: [{ id: 'heal', heal: 5, type: Card.AD }, { id: 'damage', damage: 5, type: Card.A }]
     });
 
     await q.$answer('P1', 'damage', 'P1');
@@ -370,9 +348,9 @@ test('Saves', async t => {
     const [, q] = getGame({
         rng,
         cards: [
-            { id: 'dmg1', damage: 5, canSave: true, target: Targets.OTHER, play: Play.ACTIVATE },
-            { id: 'dmg2', damage: 5, canSave: 0.5, target: Targets.OTHER, play: Play.ACTIVATE },
-            { id: 'dmg3', damage: 5, canSave: true, target: Targets.OTHER, play: Play.ACTIVATE }
+            { id: 'dmg1', damage: 5, canSave: true, type: Card.AD },
+            { id: 'dmg2', damage: 5, canSave: 0.5, type: Card.AD },
+            { id: 'dmg3', damage: 5, canSave: true, type: Card.AD }
         ]
     });
 
@@ -398,7 +376,7 @@ test('Resists', async t => {
         config: { handSize: 1 },
         cards: [
             { id: 'resist', savingThrow: Calc.PL, target: Targets.SELF, play: Play.EFFECT, react: true },
-            { id: 'dmg', damage: 5, canSave: true, canResist: true, target: Targets.OTHER, play: Play.ACTIVATE }
+            { id: 'dmg', damage: 5, canSave: true, canResist: true, type: Card.AD }
         ]
     });
 
@@ -443,7 +421,7 @@ test('Cancels', async t => {
             { id: 'dmg2', damage: 5, canCancel: 2, type: Card.AD },
             { id: 'cancel2', cancel: true },
             { id: 'cancel1', cancel: true },
-            { id: 'dmg1', damage: 5, canCancel: true, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'dmg1', damage: 5, canCancel: true, type: Card.AD },
         ]
     });
 
@@ -520,7 +498,7 @@ test('Redirects', async t => {
         config: { handSize: 1 },
         cards: [
             { id: 'redirect', redirect: true },
-            { id: 'dmg', damage: 5, canRedirect: true, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'dmg', damage: 5, canRedirect: true, type: Card.AD },
         ]
     });
 
@@ -541,8 +519,8 @@ test('Acid', async t => {
         rng,
         config: { handSize: 1 },
         cards: [
-            { id: 'acid2', damage: 1, acid: true, target: Targets.OTHER, play: Play.ACTIVATE },
-            { id: 'acid1', damage: 1, acid: true, target: Targets.OTHER, play: Play.ACTIVATE },
+            { id: 'acid2', damage: 1, acid: true, type: Card.AD },
+            { id: 'acid1', damage: 1, acid: true, type: Card.AD },
             { id: 'item2', target: Targets.SELF, play: Play.EQUIP },
             { id: 'item1', target: Targets.SELF, play: Play.EQUIP },
         ]
@@ -565,8 +543,8 @@ test('Lifesteal', async t => {
     const [, q] = getGame({
         config: { handSize: 1 },
         cards: [
-            { id: 'lfst', damage: 5, target: Targets.OTHER, play: Play.ACTIVATE, lifesteal: true },
-            { id: 'dmg', damage: 5, target: Targets.OTHER, play: Play.ACTIVATE }
+            { id: 'lfst', damage: 5, type: Card.AD, lifesteal: true },
+            { id: 'dmg', damage: 5, type: Card.AD }
         ]
     });
 
@@ -589,7 +567,7 @@ test('Lifesteal', async t => {
 
 test('Sacrifice', async t => {
     const [, q] = getGame({ cards: [
-        { id: 'dmg', damage: Calc.SACRIFICE, target: Targets.OTHER, play: Play.ACTIVATE, sacrifice: 5 }
+        { id: 'dmg', damage: Calc.SACRIFICE, type: Card.AD, sacrifice: 5 }
     ] });
 
     await q.$answer('P1', 'dmg', 'P2');
@@ -616,8 +594,8 @@ test('Untargettable', async t => {
             { id: 'left', play: Play.ACTIVATE, target: Targets.LEFT },
             { id: 'right', play: Play.ACTIVATE, target: Targets.RIGHT },
             { id: 'deadweight' },
-            { id: 'targets', play: Play.ACTIVATE, target: Targets.OTHERS },
-            { id: 'target', play: Play.ACTIVATE, target: Targets.OTHER },
+            { id: 'targets', type: Card.AM },
+            { id: 'target', type: Card.AD },
             { id: 'sanctuary', play: Play.EFFECT, target: Targets.SELF, untargettable: true },
         ]
     });
@@ -683,7 +661,7 @@ test('Transfer body', async t => {
         cards: [
             { id: 'deadweight1' },
             { id: 'deadweight2' },
-            { id: 'transfer', transferBodies: true, target: Targets.OTHER, play: Play.ACTIVATE }
+            { id: 'transfer', transferBodies: true, type: Card.AD }
         ]
     });
 
@@ -699,9 +677,9 @@ test('Haste', async t => {
         config: { handSize: 3 },
         cards: [
             { id: 'deadweight' },
-            { id: 'b', play: Play.ACTIVATE, target: Targets.OTHER },
-            { id: 'a', play: Play.ACTIVATE, target: Targets.OTHER },
-            { id: 'haste', haste: 2, play: Play.ACTIVATE, target: Targets.SELF }
+            { id: 'b', type: Card.AD },
+            { id: 'a', type: Card.AD },
+            { id: 'haste', haste: 2, type: Card.A }
         ]
     });
 
@@ -719,20 +697,10 @@ test('Combo', async t => {
         cards: [
             { id: 'deadweight' },
             { id: 'dmg', type: Card.AD, damage: 1 },
-            {
-                id: 'othercombo',
-                play: Play.ACTIVATE,
-                target: Targets.OTHER,
-                combo: { count: 1 }
-            },
+            { id: 'othercombo', type: Card.AD, combo: { count: 1 } },
             { id: 'deadweight', type: Card.AD },
             { id: 'dmg', type: Card.AD, damage: 1 },
-            {
-                id: 'combo',
-                play: Play.ACTIVATE,
-                target: Targets.OTHER,
-                combo: { count: 1, type: Card.AD, multiplier: 2 }
-            }
+            { id: 'combo', type: Card.AD, combo: { count: 1, type: Card.AD, multiplier: 2 } }
         ]
     });
 
@@ -750,8 +718,8 @@ test('Inactive', async t => {
         config: { handSize: 1 },
         cards: [
             { id: 'deadweight' },
-            { id: 'dmg', play: Play.ACTIVATE, target: Targets.OTHER, canSave: true, savingThrow: 20, damage: 1 },
-            { id: 'otherCard', play: Play.ACTIVATE, target: Targets.OTHER },
+            { id: 'dmg', type: Card.AD, canSave: true, savingThrow: 20, damage: 1 },
+            { id: 'otherCard', type: Card.AD },
             { id: 'inactive', play: Play.EFFECT, target: Targets.OTHER, inactive: true }
         ]
     });
