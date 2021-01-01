@@ -261,7 +261,7 @@ class Game {
                         });
                         if (cancelCard) {
                             forTarget.push(cancelCard);
-                            cancelCards++;
+                            cancelCards += cancelCard.cancel;
                         } else {
                             return [target, forTarget];
                         }

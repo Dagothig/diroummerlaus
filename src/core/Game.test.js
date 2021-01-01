@@ -492,8 +492,29 @@ test('Anybody can cancel a spell', async t => {
     });
 });
 
-test.skip('Cancelling an effect may require multiple cancels', async t => {
+test('Cancelling an effect may require multiple cancels', async t => {
+    const [, q] = getGame({
+        players: ['P1', 'P2', 'P3'],
+        config: { handSize: 2 },
+        cards: [
+            { id: 'cancel3', cancel: 2 },
+            { id: 'cancel2', cancel: 2 },
+            { id: 'cancel1', cancel: true },
+            { id: 'deadweight' },
+            { id: 'dmg', damage: 5, canCancel: 4, type: Card.AD },
+        ]
+    });
 
+    await q.$answer('P1', 'dmg', 'P2');
+    await q.$answer('P2', 'cancel1');
+    await q.$answer('P3', 'cancel3');
+    await q.$answer('P2', 'cancel2');
+    t.like(await q.$type(Event.CANCEL), {
+        wizard: 'P1',
+        targets: ['P2'],
+        card: 'dmg',
+        cards: ['cancel1', 'cancel2', 'cancel3']
+    });
 });
 
 test('Redirects', async t => {
