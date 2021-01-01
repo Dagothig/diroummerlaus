@@ -247,13 +247,13 @@ class Game {
 
     async $react({ wizard, card, targets, multiplier = 1 }) {
         if (card.canCancel) {
-            let cancelCards = 0;
+            let count = 0;
             const controller = $.controller();
-            const targetCancelCards = await $.all(this.wizards
+            const cancelCards = await $.all(this.wizards
                 .filter(w => w !== wizard && w.isAlive && !w.inactive)
                 .map(async target => {
                     const forTarget = [];
-                    while (cancelCards < card.canCancel) {
+                    while (count < card.canCancel) {
                         const cancelCard = await this.$askCard({
                             wizard: target,
                             cards: target.hand.filter(c => c.cancel && !forTarget.includes(c)),
@@ -261,7 +261,7 @@ class Game {
                         });
                         if (cancelCard) {
                             forTarget.push(cancelCard);
-                            cancelCards += cancelCard.cancel;
+                            count += cancelCard.cancel;
                         } else {
                             return [target, forTarget];
                         }
@@ -269,9 +269,10 @@ class Game {
                     controller.abort();
                     return [target, forTarget];
                 }));
-            if (cancelCards >= card.canCancel) {
-                this.event(Event.CANCEL, { wizard, targets, card, cards: targetCancelCards.flatMap(([, c]) => c) });
-                await $.all(targetCancelCards.map(([target, cards]) => this.$discard({ wizard: target, cards })));
+            if (count >= card.canCancel) {
+                const cards = cancelCards.flatMap(([, c]) => c);
+                this.event(Event.CANCEL, { wizard, targets, card, cards });
+                await $.all(cancelCards.map(([wizard, cards]) => this.$discard({ wizard, cards })));
                 return { cancelled: true };
             }
         }
