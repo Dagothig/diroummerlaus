@@ -1,11 +1,9 @@
 const { Event } = require('./definitions');
 const AsyncQueue = require('./AsyncQueue');
 
-module.exports = class GameQueue extends AsyncQueue {
+module.exports = Object.bindFunctions(class GameQueue extends AsyncQueue {
     constructor(game) {
         super();
-        this.$type = this.$type.bind(this);
-        this.$answer = this.$answer.bind(this);
         this.game = game;
         this.game.onEvent((t, p) => this.enqueue([t, p]));
     }
@@ -18,4 +16,4 @@ module.exports = class GameQueue extends AsyncQueue {
         await this.$type(Event.QUESTION);
         this.game.send(...args);
     }
-}
+});

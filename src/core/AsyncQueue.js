@@ -1,10 +1,7 @@
-module.exports = class AsyncQueue {
+module.exports = Object.bindFunctions(class AsyncQueue {
     constructor() {
         this.backing = [];
         this.awaiting = [];
-        this.enqueue = this.enqueue.bind(this);
-        this.$dequeue = this.$dequeue.bind(this);
-        this.$find = this.$find.bind(this);
     }
 
     enqueue(...values) {
@@ -39,4 +36,4 @@ module.exports = class AsyncQueue {
             }
         }
     }
-}
+});

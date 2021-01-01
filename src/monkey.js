@@ -135,6 +135,16 @@ monkey(Object, function allValues(obj) {
     return Object.allKeys(obj).map(key => obj[key]);
 });
 
+monkey(Object, function bindFunctions(clazz) {
+    const props = Object.getOwnPropertyNames(clazz.prototype).except('constructor');
+    const original = clazz.constructor;
+    clazz.constructor = function(...args) {
+        props.forEach(key => this[key].bind(this));
+        original.call(this, ...args);
+    };
+    return clazz;
+});
+
 monkey($, function controller() {
     let abort;
     const abortPromise = new $(res => abort = res);
