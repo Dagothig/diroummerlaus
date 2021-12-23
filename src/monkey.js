@@ -1,10 +1,11 @@
-/* istanbul ignore next */
 function monkey(obj, fn) {
     obj[fn.name] && console.warn('Overriding existing function!');
     obj[fn.name] = fn;
 }
+module.exports = monkey;
 
 global.$ = Promise;
+global.Fn = Function;
 global.areq = path => require(__dirname + '/' + path);
 
 monkey(Function, function id(x) {
@@ -31,7 +32,7 @@ monkey(Array.prototype, function take(n = 1) {
     return taken;
 });
 
-monkey(Array.prototype, function symbols(fn = Function.id) {
+monkey(Array.prototype, function symbols(fn = Fn.id) {
     return this.reduce((obj, entry) => {
         const name = fn(entry);
         obj[name] = Symbol(name);
@@ -54,20 +55,20 @@ monkey(Array.prototype, function findFrom(start, filter, direction) {
     return this[this.findIndexFrom(start, filter, direction)];
 });
 
-monkey(Array.prototype, function findEntry(fn = Function.id) {
+monkey(Array.prototype, function findEntry(fn = Fn.id) {
     const index = this.findIndex(fn);
     return [index, this[index]];
 });
 
-monkey(Array.prototype, function sum(fn = Function.id) {
+monkey(Array.prototype, function sum(fn = Fn.id) {
     return this.reduce((n, m) => n + fn(m), 0);
 });
 
-monkey(Array.prototype, function prod(fn = Function.id) {
+monkey(Array.prototype, function prod(fn = Fn.id) {
     return this.reduce((n, m) => n * fn(m), 1);
 });
 
-monkey(Array.prototype, function count(fn = Function.id) {
+monkey(Array.prototype, function count(fn = Fn.id) {
     let count = 0;
     for (const entry of this)
         if (fn(entry))
@@ -75,7 +76,7 @@ monkey(Array.prototype, function count(fn = Function.id) {
     return count;
 });
 
-monkey(Array, function gen(n, fn = Function.id){
+monkey(Array, function gen(n, fn = Fn.id){
     return new Array(n).fill().map((_, i) => fn(i));
 });
 
@@ -93,11 +94,11 @@ monkey(Array.prototype, function $find(fn) {
                 reject(err);
             }
         })),
-        $.all(this).then(Function.noop)
+        $.all(this).then(Fn.noop)
     ]);
 });
 
-monkey(Array.prototype, async function $sum(fn = Function.id) {
+monkey(Array.prototype, async function $sum(fn = Fn.id) {
     return (await $.all(this.map(fn))).sum();
 });
 
@@ -114,7 +115,7 @@ monkey(Math, function randint(min, max) {
 });
 
 monkey(Math, function dice(amount, sides) {
-    return new Array(amount).fill().map(() => Math.randint(1, sides)).reduce((n, m) => n + m);
+    return new Array(amount).fill().map(() => Math.randint(1, sides));
 });
 
 monkey(Math, function shuffle(arr) {
@@ -137,12 +138,16 @@ monkey(Object, function allValues(obj) {
 
 monkey(Object, function bindFunctions(clazz) {
     const props = Object.getOwnPropertyNames(clazz.prototype).except('constructor');
-    const original = clazz.constructor;
-    clazz.constructor = function(...args) {
-        props.forEach(key => this[key].bind(this));
-        original.call(this, ...args);
-    };
-    return clazz;
+    return class Bound extends clazz {
+        constructor(...args) {
+            super(...args);
+            props.forEach(key => this[key] = this[key].bind(this));
+        }
+    }
+});
+
+monkey(Object.prototype, function toEntries() {
+    return Object.entries(this);
 });
 
 monkey($, function controller() {

@@ -1,4 +1,6 @@
-const { Game, cards, definitions } = require('./core');
+const { Game, cards } = require('./core');
+const util = require('util');
+const PASS = Symbol("PASS");
 
 (async function() {
     const readline = require('readline').createInterface({
@@ -11,11 +13,22 @@ const { Game, cards, definitions } = require('./core');
             readline.question(...args, resolve));
 
     readline.$number = async (str, min, max) => {
+        console.log("Number in range [", min, ",", max, "]");
         let answer;
         while (
             !Number.isFinite(answer = parseInt(await readline.$question(str))) ||
             answer < min ||
-            answer >= max);
+            answer > max);
+        return answer;
+    };
+
+    readline.$choice = async (str, choices) => {
+        console.log("Choices", choices);
+        let answer;
+        do {
+            const strAnswer = await readline.$question(str);
+            answer = choices.find(choice => choice === strAnswer || choice.description === strAnswer);
+        } while (!answer);
         return answer;
     };
 
@@ -29,23 +42,26 @@ const { Game, cards, definitions } = require('./core');
 
     game = new Game({ players, cards: Object.values(cards) });
 
-    game.onEvent(async function(event, { wizard, cards, choices }) {
-        console.log(event, [
-            wizard && `${ wizard.player } ${ wizard.hitPoints } hp`,
-            cards && `cards: ${ cards.map(card => `${card.id}`).join(', ') }`
-        ].filter(Function.id).join('; '));
-        for (const choice of choices || []) {
-        }
+    game.onEvent(async function(event, payload) {
+        console.log(
+            event, 
+            util.inspect(payload.toEntries().filter(([, v]) => v).toObject(),
+            { depth: null }));
+        const { wizard, choices, min, max, obligatory } = payload;
         if (choices) {
-            console.log(choices.map(([value]) => value.id).join('\n'));
-            const choice = await readline.$number("Choice ? ", 0, choices.length);
-            const [, subChoices] = choices[choice];
-            let subChoice = null;
+            const answer = await readline.$choice("Choice ? ", choices
+                .map(([k]) => k)
+                .concat(obligatory ? [] : [PASS]));
+            const [, subChoices] = choices.find(([k]) => k === answer) || [];
+            let subAnswer;
             if (subChoices?.length) {
-                console.log(subChoices.map(([value]) => value.player).join('\n'));
-                subChoice = await readline.$number("Subchoice ? ", 0, subChoices.length);
+                subAnswer = await readline.$choice("Subchoice ? ", subChoices);
             }
-            game.send(wizard.player, choice, subChoice);
+            game.send(wizard, answer === PASS ? null : answer, subAnswer);
+        }
+        if (min || max) {
+            const answer = await readline.$number("Choice ? ", min, max);
+            game.send(wizard, answer);
         }
         /*switch (event) {
             case

@@ -1,6 +1,5 @@
 require('../monkey');
 
-
 function woo(socket) {
     const { Game, cards } = areq('core');
 

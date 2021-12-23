@@ -1,5 +1,10 @@
 const { Card, Event, Calc, Targets, Play, Zone, Item } = require('./definitions');
 
+const formatters = {
+    wizard: wizard => wizard?.player,
+    card: card => card?.id,
+}
+
 class Game {
     static defaultConfig = {
         powerLevel: 1,
@@ -38,13 +43,12 @@ class Game {
         this.rng = rng;
         this.listeners = [];
         this.config = { ...Game.defaultConfig, ...config };
-        this.rng = rng;
         this.wizards = this.rng.shuffle(players.map((player, i) => ({
             turn: i,
             async $stat(key) {
                 return (game.config[key] || 0) +
                     await this.effects.concat(this.equip)
-                        .$sum(c => game.$calc(c[key], { wizard: this }))
+                        .$sum(c => game.$calc(c[key], { wizard: this }));
             },
             flag(key) {
                 return (
@@ -74,17 +78,53 @@ class Game {
         this.listeners.push(listener);
     }
 
-    event(type, { wizard, cards, card, choices, targets, winners, hitPoints }) {
+    event(type, {
+        // Formatted
+        wizard, cards, card, targets, winners,
+        // Ignored
+        controller, resolve,
+        ...basePayload
+    }) {
         const payload = {
-            wizard: wizard?.player,
-            cards: cards?.map(({ id }) => id),
-            card: card?.id,
-            targets: targets?.map(({ player }) => player),
-            winners: winners?.map(({ player }) => player),
-            choices,
-            hitPoints
+            ...basePayload,
+            wizard: formatters.wizard(wizard),
+            cards: cards?.map(formatters.card),
+            card: formatters.card(card),
+            targets: targets?.map(formatters.wizard),
+            winners: winners?.map(formatters.wizard),
         };
         this.listeners.forEach(l => l(type, payload));
+    }
+
+    state() {
+        return {
+            config: this.config,
+            wizards: this.wizards.map(wizard => ({
+                player: wizard.player,
+                hitPoints: wizard.hitPoints,
+                hand: wizard.hand?.map(formatters.card),
+                equip: wizard.equip?.map(formatters.card),
+                effects: wizard.equip?.map(formatters.card),
+                isAlive: wizard.isAlive,
+                maxHitPoints: wizard.maxHitPoints,
+                untargettable: wizard.untargettable,
+                inactive: wizard.inactive
+            })),
+            pile: this.pile.map(formatters.card),
+            talon: this.talon.map(formatters.card),
+            turn: this.turn,
+            questions: this.questions.map(({
+                // Formatted
+                wizard, 
+                // Ignored
+                controller,
+                resolve,
+                ...question
+            }) => ({
+                wizard: formatters.wizard(wizard),
+                ...question
+            }))
+        };
     }
 
     async $ask(question) {
@@ -101,17 +141,23 @@ class Game {
 
     send(player, choice, subChoice) {
         const question = this.questions.find(question => question.wizard.player === player);
-        if (!question) return;
+        if (!question) return new Error("Answer from player not expected");
         if (choice) {
             if (question.choices) {
                 const [answer, subChoices] = question.choices.find(([c]) => choice === c) || [];
-                if (!answer && question.obligatory) return;
+                if (!answer && question.obligatory) return new Error("Unknown answer given");
                 const subAnswer = subChoices?.find(secondary => subChoice === secondary);
-                return (!(subChoices?.length) || subAnswer) && question.resolve([answer, subAnswer]);
+                return !(subChoices?.length) || subAnswer ?
+                    question.resolve([answer, subAnswer]) :
+                    new Error("Known answer, but unknown sub-answer");
             }
-            return question.min <= choice && choice <= question.max && question.resolve([choice]);
+            return question.min <= choice && choice <= question.max ?
+                question.resolve([choice]) :
+                new Error("Answer outside valid range");
         }
-        !question.obligatory && question.resolve([]);
+        return !question.obligatory ?
+            question.resolve([]) :
+            new Error("Question requires choice");
     }
 
     async $askCard({ wizard, cards, ...question }) {
@@ -170,28 +216,30 @@ class Game {
         return [card, targets];
     }
 
-    async $askNumber({ wizard, number }) {
-        return (await this.$ask({ wizard, min: 1, max: number }))[0];
+    async $askNumber({ wizard, number, ...question }) {
+        return (await this.$ask({ wizard, min: 1, max: number, ...question }))[0];
     }
 
-    roll(amount, sides) {
-        return this.rng.dice(amount, sides);
+    roll(wizard, amount, sides) {
+        const rolls = this.rng.dice(amount, sides);
+        this.event(Event.ROLL, { wizard, amount, sides, rolls });
+        return rolls.sum();
     }
 
-    async _$calc(value, env) {
+    async $calc(value, env) {
         const { wizard, target, sacrifice = 0 } = env;
         switch (typeof value) {
             case 'object':
-                const args = await $.all(value.slice(1).map(n => this._$calc(n, env)));
+                const args = await $.all(value.slice(1).map(n => this.$calc(n, env)));
                 switch (args.length && value[0]) {
                     case Calc.MUL: return args.prod();
                     case Calc.ADD: return args.sum();
-                    case Calc.ROLL: return this.roll.apply(this, args);
+                    case Calc.ROLL: return this.roll(env.wizard, ...args);
                     case Calc.HP: return args.sum(n => n.hitPoints);
                     case Calc.PL: return args.$sum(n => n.$powerLevel);
                     case Calc.CHOOSE: return args.$sum(n =>
                         this.$askNumber({ wizard, number: n, obligatory: true }));
-                    default: return await this._$calc(value[0], env);
+                    default: return await this.$calc(value[0], env);
                 }
             case 'symbol':
                 switch (value) {
@@ -209,10 +257,6 @@ class Game {
         }
     }
 
-    async $calc(value, env) {
-        return Math.ceil(await this._$calc(value, env));
-    }
-
     async $items(value, env) {
         const { wizard, target } = env;
         switch (typeof value) {
@@ -220,7 +264,7 @@ class Game {
                 const args = await $.all(value.slice(1).map(n => this.$items(n, env)));
                 switch (args.length && value[0]) {
                     case Item.CHOOSE:
-                        return [await this.$askCard({ wizard, cards: args.flat(), obligatory: true })];
+                        return [await this.$askCard({ wizard, cards: args.flat(), obligatory: true })].filter(Fn.id);
                     case Item.ALL:
                         return args.flat();
                     case Item.EXCEPT:
@@ -281,7 +325,6 @@ class Game {
             let targetMultiplier = multiplier;
             const [reactCard, reactTargets] = await this.$askCardWithTarget({
                 wizard: target,
-                action: 'react',
                 cards: target.hand.filter(c =>
                     (card.canRedirect && c.redirect) ||
                     (card.canResist && c.react))
@@ -299,7 +342,7 @@ class Game {
             const $targetSavingThrow = target.$savingThrow;
             const $cardSavingThrow = this.$calc(card.savingThrow, { wizard, card, target });
             const savingThrow = await $targetSavingThrow + await $cardSavingThrow;
-            if (!target.inactive && card.canSave && this.roll(1, 20) <= savingThrow) {
+            if (!target.inactive && card.canSave && this.roll(target, 1, 20) <= savingThrow) {
                 targetMultiplier *= card.canSave === true ? 0 : card.canSave;
                 this.event(Event.SAVE, { wizard, targets: [target], card });
             }
@@ -326,7 +369,7 @@ class Game {
                 const damage = Math.max(Math.ceil(damageCalc * multiplier) - absorb, 0);
                 this.stat(target, 'hitPoints', -damage);
                 card.lifesteal && this.stat(wizard, 'hitPoints', damage);
-                card.acid && damage && this.roll(1, 6) === 1 && this.$discard({
+                card.acid && damage && this.roll(wizard, 1, 6) === 1 && this.$discard({
                     wizard: target,
                     cards: await this.$items(
                         [Item.CHOOSE, Item.EQUIPPED],
@@ -441,10 +484,11 @@ class Game {
     }
 
     stat(wizard, stat, amount) {
-        const max = wizard['max' + stat.pascal()] || Number.MAX_VALUE;
-        const min = 0;
         const currentStat = wizard[stat];
-        const newStat = Math.min(Math.max(currentStat + amount, min), max);
+        const newStat = Math.clip(
+            currentStat + amount,
+            0,
+            wizard['max' + stat.pascal()] || Number.MAX_SAFE_INTEGER);
         wizard[stat] = newStat;
         this.event(Event.STAT, { wizard, [stat]: newStat - currentStat });
     }
@@ -475,6 +519,7 @@ class Game {
             turn = this.wizards.findIndexFrom(turn + 1, w => w.isAlive)
         ) {
             const wizard = this.wizards[turn];
+            this.turn = turn;
             this.event(Event.TURN, { wizard });
             for (const phase of Game.turnPhases) {
                 await this[phase]({ wizard });
@@ -533,9 +578,9 @@ class Game {
 
     async $death({ wizard }) {
         wizard.isAlive = false;
+        this.event(Event.DEATH, { wizard });
         for (const card of await this.$items(Item.ALL, { target: wizard }))
             this.$discard({ wizard, card });
-        this.event(Event.DEATH, { wizard });
     }
 };
 

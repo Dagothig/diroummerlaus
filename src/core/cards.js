@@ -40,7 +40,8 @@ const annulation = {
     canRedirect: false,
     cancel: true,
     target: ANY,
-    play: ACTIVATE
+    play: ACTIVATE,
+    react: null
 };
 
 const mirroir = {
@@ -603,7 +604,8 @@ module.exports = [
         canCancel: 2,
         canRedirect: true,
         target: OTHER,
-        savingThrow: -5
+        savingThrow: -5,
+        play: EFFECT
     },
     {
         id: 'MissileNucleaire',

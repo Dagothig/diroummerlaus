@@ -1,5 +1,20 @@
 const test = require('ava');
-require('./monkey');
+const monkey = require('./monkey');
+
+test('monkey', t => {
+    const obj = {};
+
+    monkey(obj, function test() { return "foo"; });
+    t.is(obj.test(), "foo");
+
+    let called;
+    const oldwarn = console.warn;
+    console.warn = () => called = true;
+    monkey(obj, function test() { return "bar"; });
+    t.is(obj.test(), "bar");
+    t.true(called);
+    console.warn = oldwarn;
+});
 
 test('Array#gen', t => {
     t.deepEqual(Array.gen(2), [0, 1])
@@ -100,6 +115,11 @@ test('Array#prod', t => {
     t.is([5, 6, 1].prod(n => n + 1), 84);
 });
 
+test('Array#count', t => {
+    t.is([].count(), 0);
+    t.is([1, 2].count(), 2);
+});
+
 test('Array#$find', async t => {
     let resolveA, resolveB, rejectC;
     const promiseA = new Promise(res => resolveA = res);
@@ -114,7 +134,7 @@ test('Array#$find', async t => {
     let rejectD, resolveE;
     const promiseD = new Promise((_, rej) => rejectD = rej);
     const promiseE = new Promise(res => resolveE = res);
-    const $foundError = [promiseD, promiseE].$find(Function.id);
+    const $foundError = [promiseD, promiseE].$find(Fn.id);
     rejectD(new Error());
     resolveE("Yes");
     await t.throwsAsync(() => $foundError);
@@ -130,7 +150,7 @@ test('Array#$sum', async t => {
     t.is(await $sum, 3);
 });
 
-test('Array#toObject', t => {
+test('Array#object', t => {
     t.like([['a', 1], ['b', 2]].toObject(), { a: 1, b: 2 })
 });
 
@@ -154,9 +174,9 @@ test('Math#dice', t => {
     const n = 1000;
     let total = 0;
     for (let i = 1; i < n; i++) {
-        t.true(Math.dice(2, 4) <= 8);
-        t.true(Math.dice(2, 4) >= 2);
-        total += Math.dice(4, 6);
+        t.true(Math.dice(2, 4).sum() <= 8);
+        t.true(Math.dice(2, 4).sum() >= 2);
+        total += Math.dice(4, 6).sum();
     }
     const avg4d6 = total / n;
     const exp = 4 * (1 + 6) / 2;
@@ -170,11 +190,11 @@ test('Array#shuffle', t => {
 });
 
 test('Function#id', t => {
-    t.is(Function.id('a'), 'a');
+    t.is(Fn.id('a'), 'a');
 });
 
 test('Function#noop', t => {
-    t.is(Function.noop('woo'))
+    t.is(Fn.noop('woo'))
 });
 
 test('Object#allKeys', t => {
@@ -187,6 +207,19 @@ test('Object#allValues', t => {
     const sym = Symbol("sym");
     const obj = { [sym]: 'foo', key: 'bar' };
     t.deepEqual(Object.allValues(obj), ['bar', 'foo']);
+});
+
+test('Object#bindFunctions', t => {
+    const Clazz = Object.bindFunctions(class Test {
+        constructor(theThing) {
+            this.theThing = theThing;
+        }
+        doTheThing() {
+            return this.theThing;
+        }
+    });
+    const doTheThing = new Clazz("foo").doTheThing;
+    t.is(doTheThing(), "foo");
 });
 
 test('$#controller', async t => {

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Diroummerlaus</title>
+        <link rel="stylesheet" href="client/style.css">
+    </head>
+    <body>
+        <form action="lobby.html" method="GET">
+            <h1>Diroummerlaüs</h1>
+            <label>
+                Ton ti nom: <input required name="name" type="text" />
+            </label>
+            <label>
+                Du sel juste à toi: <input required name="salt" type="text" />
+            </label>
+            <label>
+                Lobby: <input required name="lobby" type="text" />
+            </label>   
+            <button type="submit">
+                UIUI
+            </button>
+        </form>
+        <script>
+            const form = document.querySelector("form");
+
+            const params = new URLSearchParams(document.location.search);
+            for (const key of params.keys()) {
+                const input = document.querySelector(`[name="${ key }"]`);
+                input && (input.value = params.get(key));
+            }
+
+            const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            const lobby = document.querySelector("[name=lobby]");
+            lobby.value || (
+                lobby.value = new Array(12)
+                    .fill()
+                    .map(() => characters[Math.random() * characters.length | 0])
+                    .join(""));
+        </script>
+    </body>
+</html>

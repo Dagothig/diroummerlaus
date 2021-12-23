@@ -8,8 +8,8 @@ const GameQueue = require('./GameQueue');
 const baseArgs = {
     players: ['P1', 'P2'],
     rng: {
-        shuffle: Function.id,
-        dice: (amount, sides) => amount * (1 + sides) / 2
+        shuffle: Fn.id,
+        dice: (amount, sides) => new Array(amount).fill((sides + 1) / 2)
     },
     cards: []
 };
@@ -217,8 +217,8 @@ test('Death', async t => {
     // Skip the dmg card discard.
     await q.$type(Event.DISCARD);
 
-    t.like(await q.$type(Event.DISCARD), { wizard: 'P1', card: 'deadweight1' });
     t.like(await q.$type(Event.DEATH), { wizard: 'P1' });
+    t.like(await q.$type(Event.DISCARD), { wizard: 'P1', card: 'deadweight1' });
     t.like(await q.$type(Event.END), { winners: ['P2'] });
 });
 
@@ -346,7 +346,7 @@ test('Heal', async t => {
 });
 
 test('Saves', async t => {
-    const diceRolls = [5, 5, 15];
+    const diceRolls = [[5], [5], [15]];
     const rng = { ...baseArgs.rng, dice: diceRolls.shift.bind(diceRolls) };
     const [, q] = getGame({
         rng,
@@ -359,9 +359,16 @@ test('Saves', async t => {
 
     await q.$answer('P1', 'dmg1', 'P2');
 
-    const [[activate1], [save1, save1Payload], [dmg1, dmg1Payload]] = await q.$dequeue(3);
+    const [
+        [activate1],
+        [roll, rollPayload],
+        [save1, save1Payload],
+        [dmg1, dmg1Payload]
+    ] = await q.$dequeue(4);
 
     t.is(activate1, Event.ACTIVATE);
+    t.is(roll, Event.ROLL);
+    t.like(rollPayload, { wizard: 'P2', amount: 1, sides: 20, rolls: [5] });
     t.is(save1, Event.SAVE);
     t.like(save1Payload, { wizard: 'P1', targets: ['P2'] });
     t.is(dmg1, Event.STAT);
@@ -388,12 +395,15 @@ test('Resists', async t => {
 
     const [
         [resist, resistPayload],
+        [roll, rollPayload],
         [save, savePayload],
         [dmg, dmgPayload]
-    ] = await q.$dequeue(3);
+    ] = await q.$dequeue(4);
 
     t.is(resist, Event.EFFECT);
     t.like(resistPayload, { wizard: 'P2', card: 'resist', targets: ['P2'] });
+    t.is(roll, Event.ROLL);
+    t.like(rollPayload, { wizard: 'P2', amount: 1, sides: 20, rolls: [10.5] })
     t.is(save, Event.SAVE);
     t.like(savePayload, { wizard: 'P1', card: 'dmg', targets: ['P2'] });
     t.is(dmg, Event.STAT);
@@ -537,7 +547,7 @@ test('Redirects', async t => {
 });
 
 test('Acid', async t => {
-    const diceRolls = [1, 2];
+    const diceRolls = [[1], [2]];
     const rng = { ...baseArgs.rng, dice: diceRolls.shift.bind(diceRolls) };
     const [, q] = getGame({
         rng,
@@ -650,7 +660,7 @@ test('Untargettable', async t => {
 });
 
 test('React effect', async t => {
-    const diceRolls = [15, 5];
+    const diceRolls = [[15], [5]];
     const rng = { ...baseArgs.rng, dice: diceRolls.shift.bind(diceRolls) };
     const [, q] = getGame({
         rng,
@@ -668,10 +678,13 @@ test('React effect', async t => {
     t.like(e1p, { card: 'effect1', wizard: 'P1', targets: ['P2'] });
 
     await q.$answer('P2', 'effect2', 'P1');
-    const [[e2, e2p], [save, savep]] = await q.$dequeue(2);
+    const [[e2, e2p], [roll, rollp], [save, savep]] = await q.$dequeue(3);
 
     t.is(e2, Event.EFFECT);
     t.like(e2p, { card: 'effect2', wizard: 'P2', targets: ['P1'] });
+
+    t.is(roll, Event.ROLL);
+    t.like(rollp, { wizard: 'P1', amount: 1, sides: 20, rolls: [5] })
 
     t.is(save, Event.SAVE);
     t.like(savep, { card: 'effect2', wizard: 'P2' });
